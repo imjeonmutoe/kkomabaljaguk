@@ -118,7 +118,6 @@ self.addEventListener('push', (event: PushEvent) => {
       icon: '/icons/pwa-192x192.png',
       badge: '/icons/pwa-192x192.png',
       tag,               // deduplicates: same tag replaces the previous notification
-      renotify: false,   // don't re-alert for the same tag
       data: {
         dealId: payload.dealId,
         type: payload.type,

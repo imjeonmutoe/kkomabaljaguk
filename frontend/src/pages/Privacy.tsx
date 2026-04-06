@@ -14,8 +14,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-gray-700 leading-relaxed mb-2">{children}</p>;
+function P({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <p className={`text-sm text-gray-700 leading-relaxed mb-2${className ? ` ${className}` : ''}`}>{children}</p>;
 }
 
 function Ul({ items }: { items: string[] }) {
