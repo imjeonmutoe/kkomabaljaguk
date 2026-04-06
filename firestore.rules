@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: check if the requester is an admin
+    // Admins are stored in the 'admins' collection as { isAdmin: true }
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // ── deals ──────────────────────────────────────────────────────────────
+    match /deals/{dealId} {
+      // Anyone (including unauthenticated) can read approved deals
+      allow read: if resource.data.status == 'approved' || isAdmin();
+
+      // Any authenticated user can create (submit a deal report → status: 'pending')
+      allow create: if isSignedIn()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.reporterId == request.auth.uid;
+
+      // Only admins can update or delete
+      allow update, delete: if isAdmin();
+    }
+
+    // ── users ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Users can only read and write their own document
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ── alarms ─────────────────────────────────────────────────────────────
+    match /alarms/{alarmId} {
+      // Users can only read and write their own alarms
+      allow read, write: if isSignedIn()
+        && (
+          // On read/update/delete: check existing document
+          (resource != null && resource.data.userId == request.auth.uid)
+          ||
+          // On create: check the incoming document
+          (resource == null && request.resource.data.userId == request.auth.uid)
+        );
+    }
+
+    // ── reports ────────────────────────────────────────────────────────────
+    match /reports/{reportId} {
+      // Any authenticated user can submit a report; no one can read/update/delete
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ── admins ─────────────────────────────────────────────────────────────
+    match /admins/{uid} {
+      // Only admins can read the admins collection (self-check via isAdmin() uses get())
+      allow read: if isAdmin() || request.auth.uid == uid;
+      allow write: if false; // Manage admins via Firebase Console only
+    }
+  }
+}

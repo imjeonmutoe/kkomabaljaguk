@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background:   33 100% 96%;   /* #FFF7ED cream */
+    --foreground:   22 47% 19%;    /* #3D2B1F */
+
+    --card:         0 0% 100%;
+    --card-foreground: 22 47% 19%;
+
+    --popover:      0 0% 100%;
+    --popover-foreground: 22 47% 19%;
+
+    --primary:      25 95% 53%;    /* #F97316 orange */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary:    25 100% 90%;   /* #FFE4CC */
+    --secondary-foreground: 22 35% 27%;
+
+    --muted:        30 100% 98%;   /* #FEF9F5 */
+    --muted-foreground: 15 20% 47%;
+
+    --accent:       142 71% 45%;   /* #22C55E */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive:  0 84% 60%;     /* #EF4444 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border:       26 63% 86%;    /* #F0D9C5 */
+    --input:        25 63% 91%;    /* #F5E6D8 */
+    --ring:         25 95% 53%;
+
+    --chart-1:      25 95% 53%;
+    --chart-2:      142 71% 45%;
+    --chart-3:      260 60% 60%;
+    --chart-4:      46 80% 55%;
+    --chart-5:      0 72% 55%;
+
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+  }
+}
+
+@layer components {
+  .input-base {
+    @apply w-full rounded-xl px-3 py-2.5 text-sm bg-card text-card-foreground
+           border border-border placeholder:text-muted-foreground
+           transition focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+  }
+}
+
+@layer utilities {
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
