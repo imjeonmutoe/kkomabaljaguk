@@ -44,7 +44,6 @@ _db = firestore.client()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # EasyOCR reader is initialized at module import (singleton in processor.py)
     yield
 
 
@@ -85,7 +84,7 @@ async def run_ocr(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=413, detail=f'파일 크기는 {mb}MB 이하여야 해요.')
 
     # OCR pipeline
-    data = extract(image_bytes)
+    data = await extract(image_bytes)
 
     # Naver Shopping — only when a product name was detected
     naver_products: list[dict] = []
