@@ -58,9 +58,12 @@ export function useAdminAuth(): UseAdminAuthResult {
           setStatus(isAdmin ? 'admin' : 'denied');
         })
         .catch((err) => {
-          console.error('[useAdminAuth] getRedirectResult error:', err.code);
-          setError('Google 로그인에 실패했어요. 다시 시도해 주세요.');
-          setStatus('unauthenticated');
+          console.error('[useAdminAuth] getRedirectResult error:', err.code, err);
+          // Do not override status if onAuthStateChanged already resolved auth
+          setStatus((prev) => {
+            if (prev === 'admin' || prev === 'denied') return prev;
+            return 'unauthenticated';
+          });
         });
     }
 
