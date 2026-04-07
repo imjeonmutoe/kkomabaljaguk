@@ -97,6 +97,7 @@ export function useAdminAuth(): UseAdminAuthResult {
 
   const signOut = useCallback(async () => {
     _redirectChecked = false;
+    setStatus('loading');
     await firebaseSignOut(auth);
   }, []);
 
