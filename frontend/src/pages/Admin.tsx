@@ -322,7 +322,10 @@ export function Admin() {
         setLoading(false);
       },
       (err) => {
-        console.error('[Admin] onSnapshot error:', err);
+        // Permission denied on sign-out is expected — ignore silently
+        if (err.code !== 'permission-denied') {
+          console.error('[Admin] onSnapshot error:', err);
+        }
         setLoading(false);
       }
     );
