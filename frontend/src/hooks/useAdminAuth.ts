@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  type AuthError,
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
@@ -11,11 +11,11 @@ import { auth, db, googleProvider } from '../lib/firebase';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type AdminStatus =
-  | 'loading'          // auth state not yet resolved
-  | 'unauthenticated'  // no Google sign-in
-  | 'checking'         // checking admins collection
-  | 'admin'            // confirmed admin
-  | 'denied';          // not in admins collection
+  | 'loading'
+  | 'unauthenticated'
+  | 'checking'
+  | 'admin'
+  | 'denied';
 
 export interface UseAdminAuthResult {
   status: AdminStatus;
@@ -24,7 +24,11 @@ export interface UseAdminAuthResult {
   signOut: () => Promise<void>;
 }
 
-// ── Helper ────────────────────────────────────────────────────────────────────
+// ── Module-level: process redirect result only once (React StrictMode safe) ──
+
+let _redirectChecked = false;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function fetchIsAdmin(uid: string): Promise<boolean> {
   const snap = await getDoc(doc(db, 'admins', uid));
@@ -37,60 +41,69 @@ export function useAdminAuth(): UseAdminAuthResult {
   const [status, setStatus] = useState<AdminStatus>('loading');
   const [error, setError] = useState<string | null>(null);
 
-  // Dev bypass: skip Google auth entirely in local dev
   useEffect(() => {
+    // Dev bypass
     if (import.meta.env.DEV && import.meta.env.VITE_DEV_ADMIN === 'true') {
       setStatus('admin');
       return;
     }
-  }, []);
 
-  // Watch auth state — handles page refresh where user is already Google-signed-in
-  useEffect(() => {
-    if (import.meta.env.DEV && import.meta.env.VITE_DEV_ADMIN === 'true') return;
+    // Process redirect result once per app lifecycle
+    if (!_redirectChecked) {
+      _redirectChecked = true;
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (!result) {
+            console.log('[useAdminAuth] no redirect result');
+            return;
+          }
+          console.log('[useAdminAuth] redirect result uid:', result.user.uid);
+          const isAdmin = await fetchIsAdmin(result.user.uid);
+          setStatus(isAdmin ? 'admin' : 'denied');
+        })
+        .catch((err) => {
+          console.error('[useAdminAuth] getRedirectResult error:', err.code);
+          setError('Google 로그인에 실패했어요. 다시 시도해 주세요.');
+          setStatus('unauthenticated');
+        });
+    }
+
+    // Watch auth state for already-signed-in Google users (page refresh etc.)
     const unsub = onAuthStateChanged(auth, async (user) => {
+      console.log('[useAdminAuth] auth state:', user?.uid, 'anon:', user?.isAnonymous);
       if (!user || user.isAnonymous) {
-        setStatus('unauthenticated');
+        setStatus((prev) => (prev === 'loading' ? 'unauthenticated' : prev));
         return;
       }
-      setStatus('checking');
-      try {
-        const isAdmin = await fetchIsAdmin(user.uid);
-        setStatus(isAdmin ? 'admin' : 'denied');
-      } catch {
-        setStatus('denied');
-      }
+      // Google-authenticated user
+      setStatus((prev) => {
+        if (prev === 'admin' || prev === 'denied') return prev;
+        return 'checking';
+      });
+      const isAdmin = await fetchIsAdmin(user.uid);
+      setStatus(isAdmin ? 'admin' : 'denied');
     });
+
     return unsub;
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
     setError(null);
-    setStatus('checking');
+    console.log('[useAdminAuth] signInWithRedirect start');
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      // onAuthStateChanged will also fire, but we can set directly here
-      const isAdmin = await fetchIsAdmin(result.user.uid);
-      setStatus(isAdmin ? 'admin' : 'denied');
+      // Sign in fresh — do NOT use linkWithRedirect for anonymous user
+      // as it can fail when the Google account already exists in Firebase
+      await signInWithRedirect(auth, googleProvider);
+      // Page navigates to Google — nothing after this runs
     } catch (err) {
-      const code = (err as AuthError).code;
-      // User closed the popup — not an error
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-        setStatus('unauthenticated');
-        return;
-      }
-      if (code === 'auth/popup-blocked') {
-        setError('팝업이 차단됐어요. 주소창 오른쪽 팝업 허용 후 다시 시도해 주세요.');
-        setStatus('unauthenticated');
-        return;
-      }
-      console.error('[useAdminAuth] signInWithPopup error:', code, err);
-      setError('Google 로그인에 실패했어요. 다시 시도해 주세요.');
+      console.error('[useAdminAuth] signInWithRedirect error:', err);
+      setError('Google 로그인을 시작할 수 없어요. 다시 시도해 주세요.');
       setStatus('unauthenticated');
     }
   }, []);
 
   const signOut = useCallback(async () => {
+    _redirectChecked = false; // reset so next sign-in attempt works
     await firebaseSignOut(auth);
   }, []);
 
