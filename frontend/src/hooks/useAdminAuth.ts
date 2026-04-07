@@ -37,8 +37,17 @@ export function useAdminAuth(): UseAdminAuthResult {
   const [status, setStatus] = useState<AdminStatus>('loading');
   const [error, setError] = useState<string | null>(null);
 
+  // Dev bypass: skip Google auth entirely in local dev
+  useEffect(() => {
+    if (import.meta.env.DEV && import.meta.env.VITE_DEV_ADMIN === 'true') {
+      setStatus('admin');
+      return;
+    }
+  }, []);
+
   // Watch auth state — handles page refresh where user is already Google-signed-in
   useEffect(() => {
+    if (import.meta.env.DEV && import.meta.env.VITE_DEV_ADMIN === 'true') return;
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user || user.isAnonymous) {
         setStatus('unauthenticated');
