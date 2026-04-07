@@ -20,7 +20,12 @@ precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 // SPA fallback — all navigation requests serve index.html from precache
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')));
+// Exclude /__/ paths so Firebase Auth redirect handler flows through to Vercel proxy
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+    denylist: [/^\/__\//],
+  })
+);
 
 // ── Runtime caching ───────────────────────────────────────────────────────────
 
