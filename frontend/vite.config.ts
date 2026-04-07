@@ -5,6 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   base: '/',
 
+  server: {
+    headers: {
+      // Allow Firebase Auth popup to communicate back to the opener
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
+  },
+
   build: {
     outDir: 'dist',
     // Source maps for production debugging (uploaded to error-tracking tools,
@@ -79,10 +86,9 @@ export default defineConfig({
       },
 
       devOptions: {
-        // Enable SW in dev so push/notification can be tested with the emulator
-        enabled: true,
-        type: 'module',
-        navigateFallback: 'index.html',
+        // SW is disabled in dev — injectManifest strategy requires a build step.
+        // Test SW/push features with: npm run build && npm run preview
+        enabled: false,
       },
     }),
   ],

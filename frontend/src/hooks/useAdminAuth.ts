@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  linkWithPopup,
-  signInWithPopup,
+  linkWithRedirect,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   type AuthError,
@@ -38,8 +39,15 @@ export function useAdminAuth(): UseAdminAuthResult {
   const [status, setStatus] = useState<AdminStatus>('loading');
   const [error, setError] = useState<string | null>(null);
 
-  // Watch auth state — treat anonymous users as unauthenticated for admin purposes
   useEffect(() => {
+    // Process any pending redirect result from Google (no-op if none)
+    getRedirectResult(auth).catch((err: AuthError) => {
+      if (err.code !== 'auth/no-auth-event') {
+        setError('Google 로그인에 실패했어요. 다시 시도해 주세요.');
+      }
+    });
+
+    // Watch auth state — treat anonymous users as unauthenticated for admin purposes
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user || user.isAnonymous) {
         setStatus('unauthenticated');
@@ -53,40 +61,27 @@ export function useAdminAuth(): UseAdminAuthResult {
         setStatus('denied');
       }
     });
+
     return unsub;
   }, []);
 
+  // Redirect to Google — no popup, no COOP issue.
+  // Page navigates away → Google auth → returns to /admin → onAuthStateChanged fires.
   const signInWithGoogle = useCallback(async () => {
     setError(null);
-    setStatus('checking');
     try {
       const user = auth.currentUser;
-
       if (user && user.isAnonymous) {
-        // Upgrade: link the anonymous session to a Google account
-        try {
-          await linkWithPopup(user, googleProvider);
-        } catch (err) {
-          const code = (err as AuthError).code;
-          if (code === 'auth/credential-already-in-use') {
-            // Google account already has its own Firebase account — sign in directly
-            await signInWithPopup(auth, googleProvider);
-          } else {
-            throw err;
-          }
-        }
+        // Upgrade anonymous session to Google account
+        await linkWithRedirect(user, googleProvider);
       } else {
-        await signInWithPopup(auth, googleProvider);
+        await signInWithRedirect(auth, googleProvider);
       }
-      // onAuthStateChanged handles status update after successful sign-in
+      // Execution stops here — page navigates to Google
     } catch (err) {
-      const code = (err as AuthError).code;
-      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-        setStatus('unauthenticated');
-        return;
-      }
-      setError('Google 로그인에 실패했어요. 다시 시도해 주세요.');
+      setError('Google 로그인을 시작할 수 없어요. 다시 시도해 주세요.');
       setStatus('unauthenticated');
+      console.error('[useAdminAuth] redirect error:', err);
     }
   }, []);
 
