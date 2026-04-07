@@ -71,6 +71,8 @@ function SkeletonCard() {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
+const ADMIN_HOLD_MS = 3000;
+
 export function Timeline() {
   const navigate = useNavigate();
   const [category, setCategory] = useState<CategoryId>('전체');
@@ -80,6 +82,29 @@ export function Timeline() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [holdProgress, setHoldProgress] = useState(0); // 0~100
+
+  const startHold = useCallback(() => {
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min((elapsed / ADMIN_HOLD_MS) * 100, 100);
+      setHoldProgress(pct);
+      if (pct < 100) {
+        holdTimerRef.current = setTimeout(tick, 30);
+      } else {
+        navigate('/admin');
+        setHoldProgress(0);
+      }
+    };
+    holdTimerRef.current = setTimeout(tick, 30);
+  }, [navigate]);
+
+  const cancelHold = useCallback(() => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    setHoldProgress(0);
+  }, []);
 
   const { deals, loading, error } = useDeals({
     category: category === '전체' ? undefined : category,
@@ -136,8 +161,34 @@ export function Timeline() {
           {/* App bar */}
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shadow-sm">
-                <span className="text-primary-foreground font-extrabold text-sm leading-none">꼬</span>
+              {/* Long-press 3s → /admin (hidden trigger) */}
+              <div
+                className="relative w-9 h-9 flex-shrink-0 select-none cursor-default"
+                onMouseDown={startHold}
+                onMouseUp={cancelHold}
+                onMouseLeave={cancelHold}
+                onTouchStart={startHold}
+                onTouchEnd={cancelHold}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                {/* Progress ring — only visible while holding */}
+                {holdProgress > 0 && (
+                  <svg className="absolute inset-0 w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                    <circle
+                      cx="18" cy="18" r="16"
+                      fill="none"
+                      stroke="white"
+                      strokeOpacity="0.6"
+                      strokeWidth="2.5"
+                      strokeDasharray={`${holdProgress} 100`}
+                      strokeLinecap="round"
+                      pathLength="100"
+                    />
+                  </svg>
+                )}
+                <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shadow-sm">
+                  <span className="text-primary-foreground font-extrabold text-sm leading-none">꼬</span>
+                </div>
               </div>
               <span className="font-extrabold text-lg text-foreground tracking-tight">꼬마발자국</span>
             </div>
