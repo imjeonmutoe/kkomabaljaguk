@@ -18,7 +18,6 @@ import { Footer } from '../components/Footer';
 import { getDealById, incrementViewCount } from '../hooks/useDeals';
 import { auth, db } from '../lib/firebase';
 import type { Deal } from '../types';
-import type { Timestamp } from 'firebase/firestore';
 
 const ADSENSE_SLOT_DETAIL = import.meta.env.VITE_ADSENSE_SLOT_DETAIL as string;
 
