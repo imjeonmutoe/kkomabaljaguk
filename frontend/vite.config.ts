@@ -89,6 +89,7 @@ export default defineConfig({
         // SW is disabled in dev — injectManifest strategy requires a build step.
         // Test SW/push features with: npm run build && npm run preview
         enabled: false,
+        suppressWarnings: true,
       },
     }),
   ],
