@@ -21,18 +21,29 @@ function formatPrice(price: number): string {
 
 type DealPhase = 'ended' | 'active' | 'soon' | 'upcoming';
 
+function toMs(v: unknown): number | null {
+  if (!v) return null;
+  if (typeof v === 'string') return new Date(v).getTime();
+  if (typeof (v as { toMillis?: unknown }).toMillis === 'function')
+    return (v as { toMillis: () => number }).toMillis();
+  return null;
+}
+
 function getPhase(deal: Deal): DealPhase {
   const now = Date.now();
-  const startMs = deal.startAt.toDate().getTime();
-  const endMs = deal.endAt.toDate().getTime();
-  if (endMs < now) return 'ended';
+  const startMs = toMs(deal.startAt);
+  const endMs = toMs(deal.endAt);
+  if (endMs != null && endMs < now) return 'ended';
+  if (startMs == null || endMs == null) return 'active';
   if (startMs <= now) return 'active';
   if (startMs - now < 24 * 60 * 60 * 1000) return 'soon';
   return 'upcoming';
 }
 
 function timeRemaining(endAt: Timestamp): string | null {
-  const ms = endAt.toDate().getTime() - Date.now();
+  const endMs = toMs(endAt);
+  if (endMs == null) return null;
+  const ms = endMs - Date.now();
   if (ms <= 0) return null;
   const totalMin = Math.floor(ms / 60_000);
   const days = Math.floor(totalMin / (60 * 24));

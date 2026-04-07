@@ -34,14 +34,26 @@ interface EditForm {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-function tsToDatetimeLocal(ts: Timestamp): string {
-  const d = ts.toDate();
+function tsToMs(v: unknown): number | null {
+  if (!v) return null;
+  if (typeof v === 'string') return new Date(v).getTime();
+  if (typeof (v as { toMillis?: unknown }).toMillis === 'function')
+    return (v as { toMillis: () => number }).toMillis();
+  return null;
+}
+
+function tsToDatetimeLocal(ts: unknown): string {
+  const ms = tsToMs(ts);
+  if (ms == null) return '';
+  const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function formatDate(ts: Timestamp): string {
-  const d = ts.toDate();
+function formatDate(ts: unknown): string {
+  const ms = tsToMs(ts);
+  if (ms == null) return '—';
+  const d = new Date(ms);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 

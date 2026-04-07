@@ -24,8 +24,18 @@ const ADSENSE_SLOT_DETAIL = import.meta.env.VITE_ADSENSE_SLOT_DETAIL as string;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(ts: Timestamp): string {
-  const d = ts.toDate();
+function toMs(v: unknown): number | null {
+  if (!v) return null;
+  if (typeof v === 'string') return new Date(v).getTime();
+  if (typeof (v as { toMillis?: unknown }).toMillis === 'function')
+    return (v as { toMillis: () => number }).toMillis();
+  return null;
+}
+
+function formatDate(ts: unknown): string {
+  const ms = toMs(ts);
+  if (ms == null) return '날짜 미정';
+  const d = new Date(ms);
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
@@ -37,8 +47,11 @@ type DealPhase = 'ended' | 'active' | 'upcoming';
 
 function getDealPhase(deal: Deal): DealPhase {
   const now = Date.now();
-  if (deal.endAt.toDate().getTime() < now) return 'ended';
-  if (deal.startAt.toDate().getTime() <= now) return 'active';
+  const endMs = toMs(deal.endAt);
+  const startMs = toMs(deal.startAt);
+  if (endMs != null && endMs < now) return 'ended';
+  if (startMs == null || endMs == null) return 'active';
+  if (startMs <= now) return 'active';
   return 'upcoming';
 }
 

@@ -31,6 +31,15 @@ const SORT_OPTIONS: { value: SortType; label: string; Icon: React.ElementType }[
   { value: '마감임박', label: '마감임박', Icon: Clock },
 ];
 
+// Handles Firestore Timestamp, "YYYY-MM-DD" string, or null
+function toMs(v: unknown): number | null {
+  if (!v) return null;
+  if (typeof v === 'string') return new Date(v).getTime();
+  if (typeof (v as { toMillis?: unknown }).toMillis === 'function')
+    return (v as { toMillis: () => number }).toMillis();
+  return null;
+}
+
 function sortDeals(deals: Deal[], sort: SortType): Deal[] {
   const now = Date.now();
   switch (sort) {
@@ -38,16 +47,21 @@ function sortDeals(deals: Deal[], sort: SortType): Deal[] {
       return [...deals].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
     case '인기순':
       return [...deals].sort((a, b) => b.viewCount - a.viewCount);
-    case '마감임박':
+    case '마감임박': {
+      const endMs = (d: Deal) => toMs(d.endAt);
       return [...deals]
-        .filter((d) => d.endAt.toDate().getTime() > now)
-        .sort((a, b) => a.endAt.toMillis() - b.endAt.toMillis());
+        .filter((d) => { const ms = endMs(d); return ms != null && ms > now; })
+        .sort((a, b) => endMs(a)! - endMs(b)!);
+    }
   }
 }
 
 function isDealActive(deal: Deal): boolean {
   const now = Date.now();
-  return deal.startAt.toDate().getTime() <= now && deal.endAt.toDate().getTime() > now;
+  const start = toMs(deal.startAt);
+  const end = toMs(deal.endAt);
+  if (start == null || end == null) return true; // 날짜 미입력 딜은 진행 중으로 표시
+  return start <= now && end > now;
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
