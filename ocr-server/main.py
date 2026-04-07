@@ -4,8 +4,9 @@ import json
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Header
+from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -22,19 +23,23 @@ load_dotenv()
 FRONTEND_ORIGINS = [
     o.strip()
     for o in os.getenv('FRONTEND_ORIGIN', 'https://your-app.vercel.app').split(',')
-]
+] + ['http://localhost:5173', 'http://localhost:3000']
 MAX_IMAGE_BYTES = int(os.getenv('MAX_IMAGE_MB', '5')) * 1024 * 1024
 
 # ── Firebase Admin init ───────────────────────────────────────────────────────
-# FIREBASE_CREDENTIALS must be a base64-encoded service account JSON string.
-# Generate with: base64 -i serviceAccountKey.json | tr -d '\n'
+# Uses GOOGLE_APPLICATION_CREDENTIALS_JSON (plain JSON string) if present,
+# then FIREBASE_CREDENTIALS (base64-encoded), then ADC fallback.
 
+_cred_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON', '')
 _cred_b64 = os.getenv('FIREBASE_CREDENTIALS', '')
-if _cred_b64:
+if _cred_json:
+    _cred_dict = json.loads(_cred_json)
+    firebase_admin.initialize_app(credentials.Certificate(_cred_dict))
+elif _cred_b64:
     _cred_dict = json.loads(base64.b64decode(_cred_b64).decode('utf-8'))
     firebase_admin.initialize_app(credentials.Certificate(_cred_dict))
 else:
-    # Fallback: uses GOOGLE_APPLICATION_CREDENTIALS env var (local dev)
+    # Fallback: Application Default Credentials (Cloud Run default SA)
     firebase_admin.initialize_app()
 
 _db = firestore.client()
@@ -52,9 +57,16 @@ app = FastAPI(title='꼬마발자국 OCR Server', version='2.0.0', lifespan=life
 app.add_middleware(
     CORSMiddleware,
     allow_origins=FRONTEND_ORIGINS,
+    allow_origin_regex=r'https://.*\.vercel\.app',
     allow_methods=['GET', 'POST'],
     allow_headers=['*'],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    print(f'[server] unhandled exception: {type(exc).__name__}: {exc}')
+    return JSONResponse(status_code=500, content={'detail': 'Internal server error'})
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
