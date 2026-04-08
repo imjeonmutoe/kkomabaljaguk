@@ -44,7 +44,7 @@ function sortDeals(deals: Deal[], sort: SortType): Deal[] {
   const now = Date.now();
   switch (sort) {
     case '최신순':
-      return [...deals].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      return [...deals].sort((a, b) => (toMs(b.createdAt) ?? 0) - (toMs(a.createdAt) ?? 0));
     case '인기순':
       return [...deals].sort((a, b) => b.viewCount - a.viewCount);
     case '마감임박': {

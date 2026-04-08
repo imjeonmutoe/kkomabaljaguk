@@ -32,15 +32,16 @@ MAX_IMAGE_BYTES = int(os.getenv('MAX_IMAGE_MB', '5')) * 1024 * 1024
 
 _cred_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON', '')
 _cred_b64 = os.getenv('FIREBASE_CREDENTIALS', '')
+_firebase_options = {'projectId': 'kkomabaljaguk'}
 if _cred_json:
     _cred_dict = json.loads(_cred_json)
-    firebase_admin.initialize_app(credentials.Certificate(_cred_dict))
+    firebase_admin.initialize_app(credentials.Certificate(_cred_dict), _firebase_options)
 elif _cred_b64:
     _cred_dict = json.loads(base64.b64decode(_cred_b64).decode('utf-8'))
-    firebase_admin.initialize_app(credentials.Certificate(_cred_dict))
+    firebase_admin.initialize_app(credentials.Certificate(_cred_dict), _firebase_options)
 else:
     # Fallback: Application Default Credentials (Cloud Run default SA)
-    firebase_admin.initialize_app()
+    firebase_admin.initialize_app(options=_firebase_options)
 
 _db = firestore.client()
 
@@ -66,7 +67,9 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     print(f'[server] unhandled exception: {type(exc).__name__}: {exc}')
-    return JSONResponse(status_code=500, content={'detail': 'Internal server error'})
+    origin = request.headers.get('origin', '')
+    headers = {'Access-Control-Allow-Origin': origin} if origin else {}
+    return JSONResponse(status_code=500, content={'detail': 'Internal server error'}, headers=headers)
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
