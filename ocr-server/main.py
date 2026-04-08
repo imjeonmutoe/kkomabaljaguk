@@ -30,7 +30,11 @@ MAX_IMAGE_BYTES = int(os.getenv('MAX_IMAGE_MB', '5')) * 1024 * 1024
 # Uses GOOGLE_APPLICATION_CREDENTIALS_JSON (plain JSON string) if present,
 # then FIREBASE_CREDENTIALS (base64-encoded), then ADC fallback.
 
-_cred_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON', '')
+_cred_json = (
+    os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
+    or os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+    or ''
+)
 _cred_b64 = os.getenv('FIREBASE_CREDENTIALS', '')
 _firebase_options = {'projectId': 'kkomabaljaguk'}
 if _cred_json:
