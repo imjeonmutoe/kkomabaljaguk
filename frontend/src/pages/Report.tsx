@@ -283,7 +283,7 @@ export function Report() {
     const blocks: RawBlock[] = await res.json();
 
     // Exclude social/doc links; include all other blocks that have a URL
-    const EXCLUDED_PATTERNS = ['kakao', 'band', 'drive.google.com', 'docs.google.com'];
+    const EXCLUDED_PATTERNS = ['kakao', 'brand', 'drive.google.com', 'docs.google.com'];
     const items = blocks.filter((b) => {
       if (!b.url) return false;
       if (b.url.startsWith('mailto:')) return false;
