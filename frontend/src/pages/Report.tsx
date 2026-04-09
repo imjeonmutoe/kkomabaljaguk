@@ -272,17 +272,8 @@ export function Report() {
     };
     const blocks: RawBlock[] = await res.json();
 
-    // Find the "공구OPEN" label block (handles spaced variant "공 구 O P E N")
-    const openIdx = blocks.findIndex(
-      (b) =>
-        b.block_type === 'label' &&
-        b.title.replace(/\s/g, '').includes('공구OPEN'),
-    );
-    // Only include link blocks after the "공구OPEN" label; fall back to all links
-    const items =
-      openIdx >= 0
-        ? blocks.slice(openIdx + 1).filter((b) => b.block_type === 'link')
-        : blocks.filter((b) => b.block_type === 'link');
+    // Only include blocks that have a URL (skip label/decoration blocks)
+    const items = blocks.filter((b) => !!b.url);
 
     setInpockItems(
       items.map((item, i) => ({
