@@ -451,10 +451,20 @@ export function Report() {
 
       if (mode === 'inpock') {
         const checked = inpockItems.filter((i) => i.checked);
+        // Extract influencer username from inpock URL (link.inpock.co.kr/{username})
+        const inpockBrand = (() => {
+          try {
+            const normalized = linkInput.trim().startsWith('http') ? linkInput.trim() : `https://${linkInput.trim()}`;
+            return new URL(normalized).pathname.split('/').filter(Boolean)[0] ?? '';
+          } catch {
+            return '';
+          }
+        })();
         await Promise.all(
           checked.map((item) =>
             addDoc(collection(db, 'deals'), {
               ...base,
+              brand: inpockBrand,
               category: item.category, // per-item category
               productName: item.title,
               thumbnailUrl: item.imageUrl,

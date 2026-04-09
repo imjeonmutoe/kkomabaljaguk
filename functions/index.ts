@@ -523,7 +523,7 @@ export const scrapeInpockDeals = onSchedule(
             // Save new deal as pending
             await db.collection('deals').add({
               productName: meta.ogTitle,
-              brand: inf.name,
+              brand: inf.name || inf.instagramId || '',
               category: '기타',
               startAt,
               endAt,
