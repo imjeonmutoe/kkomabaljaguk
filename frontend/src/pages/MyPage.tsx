@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  collection, doc, onSnapshot, setDoc,
+  collection, doc, onSnapshot, setDoc, deleteDoc,
   query, where, orderBy, limit, serverTimestamp,
 } from 'firebase/firestore';
 import {
@@ -131,6 +131,44 @@ function LoginModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Delete Confirm Modal ──────────────────────────────────────────────────────
+
+function DeleteConfirmModal({ onConfirm, onCancel, deleting }: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-lg border border-stone-200 w-full max-w-sm p-6">
+        <h2 className="text-base font-bold text-stone-900 mb-2">제보 삭제</h2>
+        <p className="text-sm text-stone-500 mb-6 leading-relaxed">
+          정말 삭제하시겠어요? 되돌릴 수 없어요.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-stone-300 text-stone-600 hover:bg-stone-50 disabled:opacity-50 transition-colors"
+          >
+            취소
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 transition-colors"
+          >
+            {deleting ? '삭제 중…' : '삭제'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Mini deal card (2-col grid) ───────────────────────────────────────────────
 
 function WishCard({ deal, onClick }: { deal: Deal; onClick: () => void }) {
@@ -236,6 +274,12 @@ export function MyPage() {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [alarmDeals, setAlarmDeals] = useState<Record<string, string>>({}); // dealId → productName
 
+  // My reported deals
+  const [myDeals, setMyDeals] = useState<Deal[]>([]);
+  const [myDealsLoading, setMyDealsLoading] = useState(true);
+  const [deletingDeal, setDeletingDeal] = useState<Deal | null>(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+
   // Notification settings
   const [notif, setNotif] = useState<NotifSettings>({
     newDeal: true,
@@ -311,6 +355,46 @@ export function MyPage() {
     });
   }, [alarms]);
 
+  // ── My reported deals subscription ───────────────────────────────────────
+  useEffect(() => {
+    if (!uid) { setMyDealsLoading(false); return; }
+
+    const q = query(
+      collection(db, 'deals'),
+      where('reporterId', '==', uid),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as Deal)
+        .sort((a, b) => {
+          const aMs = typeof (a.createdAt as { toMillis?: () => number }).toMillis === 'function'
+            ? (a.createdAt as { toMillis: () => number }).toMillis()
+            : 0;
+          const bMs = typeof (b.createdAt as { toMillis?: () => number }).toMillis === 'function'
+            ? (b.createdAt as { toMillis: () => number }).toMillis()
+            : 0;
+          return bMs - aMs;
+        });
+      setMyDeals(docs);
+      setMyDealsLoading(false);
+    });
+    return unsub;
+  }, [uid]);
+
+  const handleDeleteMyDeal = useCallback(async () => {
+    if (!deletingDeal) return;
+    setDeleteInProgress(true);
+    try {
+      await deleteDoc(doc(db, 'deals', deletingDeal.id));
+      setDeletingDeal(null);
+    } catch (err) {
+      console.error('[MyPage] deleteDoc error:', err);
+      alert('삭제에 실패했어요. 다시 시도해 주세요.');
+    } finally {
+      setDeleteInProgress(false);
+    }
+  }, [deletingDeal]);
+
   // ── Notification settings subscription ───────────────────────────────────
   useEffect(() => {
     if (!uid || isAnon) return;
@@ -368,6 +452,14 @@ export function MyPage() {
     <div className="min-h-screen bg-orange-50 pb-24">
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+
+      {deletingDeal && (
+        <DeleteConfirmModal
+          onConfirm={handleDeleteMyDeal}
+          onCancel={() => setDeletingDeal(null)}
+          deleting={deleteInProgress}
+        />
+      )}
 
       {/* Header */}
       <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
@@ -461,7 +553,59 @@ export function MyPage() {
           </div>
         </Section>
 
-        {/* ── 3. Alarm history ─────────────────────────────────────────────── */}
+        {/* ── 3. My reported deals ─────────────────────────────────────────── */}
+        <Section title="내 제보 목록">
+          <div className="px-4 pb-4">
+            {isAnon ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-2 text-stone-400">
+                <p className="text-sm">로그인 후 내 제보를 확인할 수 있어요</p>
+              </div>
+            ) : myDealsLoading ? (
+              <div className="py-8 flex justify-center">
+                <span className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : myDeals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-2 text-stone-400">
+                <p className="text-sm">제보한 공구가 없어요</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {myDeals.map((deal) => (
+                  <div
+                    key={deal.id}
+                    className="flex items-center justify-between gap-3 py-3 border-b border-stone-100 last:border-0"
+                  >
+                    <button
+                      className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                      onClick={() => navigate(`/deal/${deal.id}`)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-stone-900 truncate">{deal.productName}</p>
+                        <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 ${
+                          deal.status === 'approved'
+                            ? 'bg-green-100 text-green-600'
+                            : deal.status === 'rejected'
+                              ? 'bg-red-100 text-red-500'
+                              : 'bg-amber-100 text-amber-600'
+                        }`}>
+                          {deal.status === 'approved' ? '승인됨' : deal.status === 'rejected' ? '거절됨' : '검토 중'}
+                        </span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setDeletingDeal(deal)}
+                      className="flex-shrink-0 text-xs bg-red-500 hover:bg-red-600 text-white font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Section>
+
+        {/* ── 4. Alarm history ─────────────────────────────────────────────── */}
         <Section title="알림 내역">
           {isAnon ? (
             <div className="px-4 pb-4 flex flex-col items-center justify-center py-8 gap-2 text-stone-400">

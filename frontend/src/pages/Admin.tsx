@@ -7,6 +7,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  deleteDoc,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -70,6 +71,46 @@ function SkeletonRow() {
         <div className="h-8 w-12 bg-gray-200 rounded-lg" />
         <div className="h-8 w-12 bg-gray-200 rounded-lg" />
         <div className="h-8 w-12 bg-gray-200 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+// ── Delete Confirm Modal ──────────────────────────────────────────────────────
+
+interface DeleteConfirmModalProps {
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
+}
+
+function DeleteConfirmModal({ onConfirm, onCancel, deleting }: DeleteConfirmModalProps) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-lg border border-stone-200 w-full max-w-sm p-6">
+        <h2 className="text-base font-bold text-stone-900 mb-2">딜 삭제</h2>
+        <p className="text-sm text-stone-500 mb-6 leading-relaxed">
+          정말 삭제하시겠어요? 되돌릴 수 없어요.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-stone-300 text-stone-600 hover:bg-stone-50 disabled:opacity-50 transition-colors"
+          >
+            취소
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 transition-colors"
+          >
+            {deleting ? '삭제 중…' : '삭제'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -321,6 +362,8 @@ export function Admin() {
   const [tab, setTab] = useState<TabStatus>('pending');
   const [actionId, setActionId] = useState<string | null>(null);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [deletingDeal, setDeletingDeal] = useState<Deal | null>(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   // ── Realtime listener (admin only) ────────────────────────────────────────
 
@@ -382,6 +425,20 @@ export function Admin() {
   const saveEdit = useCallback(async (dealId: string, data: Partial<Deal>) => {
     await updateDoc(doc(db, 'deals', dealId), data as Record<string, unknown>);
   }, []);
+
+  const handleDelete = useCallback(async () => {
+    if (!deletingDeal) return;
+    setDeleteInProgress(true);
+    try {
+      await deleteDoc(doc(db, 'deals', deletingDeal.id));
+      setDeletingDeal(null);
+    } catch (err) {
+      console.error('[Admin] deleteDoc error:', err);
+      alert('삭제에 실패했어요. 다시 시도해 주세요.');
+    } finally {
+      setDeleteInProgress(false);
+    }
+  }, [deletingDeal]);
 
   // ── Auth states ───────────────────────────────────────────────────────────
 
@@ -624,6 +681,13 @@ export function Admin() {
                     >
                       수정
                     </button>
+                    <button
+                      onClick={() => setDeletingDeal(deal)}
+                      disabled={busy}
+                      className="text-xs bg-red-500 hover:bg-red-600 text-white font-semibold px-3 py-1.5 rounded-xl disabled:opacity-50 transition-colors"
+                    >
+                      삭제
+                    </button>
                     {busy && (
                       <span className="flex items-center">
                         <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -643,6 +707,15 @@ export function Admin() {
           deal={editingDeal}
           onClose={() => setEditingDeal(null)}
           onSave={saveEdit}
+        />
+      )}
+
+      {/* ── Delete Confirm Modal ────────────────────────────────────────────── */}
+      {deletingDeal && (
+        <DeleteConfirmModal
+          onConfirm={handleDelete}
+          onCancel={() => setDeletingDeal(null)}
+          deleting={deleteInProgress}
         />
       )}
     </div>
