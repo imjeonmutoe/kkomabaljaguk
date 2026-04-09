@@ -29,6 +29,7 @@ interface InpockItem {
   openAt: string | null;   // datetime-local
   openUntil: string | null; // datetime-local
   checked: boolean;
+  category: string; // per-item category selection
 }
 
 interface SrookpayForm {
@@ -267,8 +268,21 @@ export function Report() {
       url: string;
       open_at: string | null;
       open_until: string | null;
+      block_type: string;
     };
-    const items: RawBlock[] = await res.json();
+    const blocks: RawBlock[] = await res.json();
+
+    // Find the "공구OPEN" label block (handles spaced variant "공 구 O P E N")
+    const openIdx = blocks.findIndex(
+      (b) =>
+        b.block_type === 'label' &&
+        b.title.replace(/\s/g, '').includes('공구OPEN'),
+    );
+    // Only include link blocks after the "공구OPEN" label; fall back to all links
+    const items =
+      openIdx >= 0
+        ? blocks.slice(openIdx + 1).filter((b) => b.block_type === 'link')
+        : blocks.filter((b) => b.block_type === 'link');
 
     setInpockItems(
       items.map((item, i) => ({
@@ -279,6 +293,7 @@ export function Report() {
         openAt: item.open_at ? toDatetimeLocal(item.open_at) : null,
         openUntil: item.open_until ? toDatetimeLocal(item.open_until) : null,
         checked: true,
+        category: '',
       })),
     );
   }
@@ -384,14 +399,21 @@ export function Report() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!common.category) {
-      setCategoryError('카테고리를 선택해 주세요.');
-      return;
-    }
-
-    if (mode === 'inpock' && inpockItems.filter((i) => i.checked).length === 0) {
-      setParseError('제보할 항목을 하나 이상 선택해 주세요.');
-      return;
+    if (mode === 'inpock') {
+      const checked = inpockItems.filter((i) => i.checked);
+      if (checked.length === 0) {
+        setParseError('제보할 항목을 하나 이상 선택해 주세요.');
+        return;
+      }
+      if (checked.some((i) => !i.category)) {
+        setParseError('선택된 모든 항목에 카테고리를 설정해 주세요.');
+        return;
+      }
+    } else {
+      if (!common.category) {
+        setCategoryError('카테고리를 선택해 주세요.');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -421,13 +443,13 @@ export function Report() {
           checked.map((item) =>
             addDoc(collection(db, 'deals'), {
               ...base,
+              category: item.category, // per-item category
               productName: item.title,
               thumbnailUrl: item.imageUrl,
               sourceUrl: item.url,
               instagramUrl: '',
-              // Prefer item-level dates; fall back to common fields
-              startAt: item.openAt ? new Date(item.openAt) : base.startAt,
-              endAt: item.openUntil ? new Date(item.openUntil) : base.endAt,
+              startAt: item.openAt ? new Date(item.openAt) : null,
+              endAt: item.openUntil ? new Date(item.openUntil) : null,
               price: 0,
               originalPrice: 0,
             }),
@@ -468,10 +490,8 @@ export function Report() {
   // ── Render guards ──────────────────────────────────────────────────────────
   if (success) return <SuccessScreen onBack={() => navigate('/')} />;
 
-  const showCommonFields =
-    (mode === 'inpock' && inpockItems.length > 0) ||
-    mode === 'srookpay' ||
-    mode === 'ocr';
+  // Inpock mode has per-item fields; common fields shown only for srookpay/ocr
+  const showCommonFields = mode === 'srookpay' || mode === 'ocr';
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -576,36 +596,85 @@ export function Report() {
             </div>
             <ul className="divide-y divide-stone-100">
               {inpockItems.map((item) => (
-                <li key={item.id} className="flex items-center gap-3 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    id={`item-${item.id}`}
-                    checked={item.checked}
-                    onChange={(e) =>
-                      setInpockItems((p) =>
-                        p.map((i) =>
-                          i.id === item.id ? { ...i, checked: e.target.checked } : i,
-                        ),
-                      )
-                    }
-                    className="w-4 h-4 rounded accent-orange-500 cursor-pointer flex-shrink-0"
-                  />
-                  {item.imageUrl && (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.title}
-                      loading="lazy"
-                      className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-stone-100"
+                <li key={item.id} className="px-4 py-3 flex flex-col gap-2">
+                  {/* Checkbox + thumbnail + title row */}
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id={`item-${item.id}`}
+                      checked={item.checked}
+                      onChange={(e) =>
+                        setInpockItems((p) =>
+                          p.map((i) =>
+                            i.id === item.id ? { ...i, checked: e.target.checked } : i,
+                          ),
+                        )
+                      }
+                      className="w-4 h-4 rounded accent-orange-500 cursor-pointer flex-shrink-0 mt-1"
                     />
-                  )}
-                  <label htmlFor={`item-${item.id}`} className="flex-1 cursor-pointer min-w-0">
-                    <p className="text-sm font-medium text-stone-900 line-clamp-2">{item.title}</p>
-                    {(item.openAt || item.openUntil) && (
-                      <p className="text-[11px] text-stone-400 mt-0.5">
-                        {item.openAt?.slice(0, 10) ?? '?'} ~ {item.openUntil?.slice(0, 10) ?? '?'}
-                      </p>
+                    {item.imageUrl && (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.title}
+                        loading="lazy"
+                        className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-stone-100"
+                      />
                     )}
-                  </label>
+                    <label htmlFor={`item-${item.id}`} className="flex-1 cursor-pointer min-w-0">
+                      <p className="text-sm font-medium text-stone-900 line-clamp-2">{item.title}</p>
+                    </label>
+                  </div>
+                  {/* Per-item fields: category + dates */}
+                  <div className="ml-7 flex flex-col gap-2">
+                    <select
+                      value={item.category}
+                      onChange={(e) =>
+                        setInpockItems((p) =>
+                          p.map((i) =>
+                            i.id === item.id ? { ...i, category: e.target.value } : i,
+                          )
+                        )
+                      }
+                      className="border border-stone-200 bg-white rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
+                    >
+                      <option value="">카테고리 선택</option>
+                      {DEAL_CATEGORIES.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] text-stone-500">시작일</span>
+                        <input
+                          type="datetime-local"
+                          value={item.openAt ?? ''}
+                          onChange={(e) =>
+                            setInpockItems((p) =>
+                              p.map((i) =>
+                                i.id === item.id ? { ...i, openAt: e.target.value } : i,
+                              )
+                            )
+                          }
+                          className="border border-stone-200 bg-white rounded-xl px-2 py-1.5 text-[11px] text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] text-stone-500">종료일</span>
+                        <input
+                          type="datetime-local"
+                          value={item.openUntil ?? ''}
+                          onChange={(e) =>
+                            setInpockItems((p) =>
+                              p.map((i) =>
+                                i.id === item.id ? { ...i, openUntil: e.target.value } : i,
+                              )
+                            )
+                          }
+                          className="border border-stone-200 bg-white rounded-xl px-2 py-1.5 text-[11px] text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -794,7 +863,19 @@ export function Report() {
           </div>
         )}
 
-        {/* ── Submit ──────────────────────────────────────────────────── */}
+        {/* ── Submit (inpock mode) ─────────────────────────────────────── */}
+        {mode === 'inpock' && inpockItems.length > 0 && (
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3.5 rounded-2xl text-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all mb-4"
+          >
+            {submitting && <Spinner />}
+            {submitting ? '제보 중...' : '제보 완료'}
+          </button>
+        )}
+
+        {/* ── Submit (srookpay / ocr mode) ─────────────────────────────── */}
         {showCommonFields && (
           <button
             type="submit"
