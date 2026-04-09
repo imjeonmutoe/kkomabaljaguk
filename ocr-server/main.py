@@ -345,6 +345,7 @@ async def parse_srookpay(body: ParseUrlRequest) -> dict:
 
     product_name = _extract_og(html, 'title')
     thumbnail_url = _extract_og(html, 'image')
+    description = _extract_og(html, 'description')
 
     # Extract sale price — try common label patterns first, then JSON-LD
     price = ''
@@ -376,4 +377,5 @@ async def parse_srookpay(body: ParseUrlRequest) -> dict:
         'thumbnailUrl': thumbnail_url,
         'price': price,
         'originalPrice': original_price,
+        'description': description,
     }
