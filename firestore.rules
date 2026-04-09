@@ -55,6 +55,12 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // ── influencers ────────────────────────────────────────────────────────
+    match /influencers/{influencerId} {
+      // Read and write restricted to admins only; Admin SDK bypasses these rules
+      allow read, write: if isAdmin();
+    }
+
     // ── admins ─────────────────────────────────────────────────────────────
     match /admins/{uid} {
       // Only admins can read the admins collection (self-check via isAdmin() uses get())

@@ -338,7 +338,247 @@ export const cleanupInactiveTokens = onSchedule(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Naver products refresh — daily at 6am KST
+// 4. Inpock scraper — daily at 9am KST
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface InpockBlock {
+  title?: string;
+  image?: string;
+  url?: string;
+  open_at?: string;
+  open_until?: string;
+  block_type?: string;
+}
+
+interface SrookpayMeta {
+  ogTitle: string;
+  ogImage: string;
+  price: number;
+  originalPrice: number;
+}
+
+/**
+ * Follow redirect chain on short URLs (e.g. srok.kr) to get the final URL.
+ * Returns null if the redirect target is not a srookpay domain.
+ */
+async function resolveRedirect(url: string): Promise<string | null> {
+  try {
+    const resp = await fetch(url, { redirect: 'follow' });
+    const finalUrl = resp.url;
+    if (finalUrl.includes('srookpay.com') || finalUrl.includes('srok.kr')) {
+      return finalUrl;
+    }
+    return finalUrl; // accept any final URL
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse og:title, og:image, price, and original price from a srookpay product page.
+ */
+async function fetchSrookpayMeta(url: string): Promise<SrookpayMeta | null> {
+  try {
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KkomaBaljaguk/1.0)' },
+    });
+    if (!resp.ok) return null;
+
+    const html = await resp.text();
+
+    // og:title
+    const titleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+    const ogTitle = titleMatch?.[1]?.trim() ?? '';
+
+    // og:image
+    const imageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    let ogImage = imageMatch?.[1]?.trim() ?? '';
+    if (ogImage.startsWith('//')) ogImage = 'https:' + ogImage;
+
+    // Price — look for patterns like "79,000원" or data-price attributes
+    const priceMatch = html.match(/data-price=["']?(\d[\d,]+)["']?/i)
+      ?? html.match(/["']price["'][^>]*>\s*(\d[\d,]+)\s*원/i)
+      ?? html.match(/class=["'][^"']*(?:sale|discount|deal)[^"']*["'][^>]*>\s*(\d[\d,]+)/i)
+      ?? html.match(/(\d[\d,]+)\s*원/);
+    const price = priceMatch
+      ? parseInt(priceMatch[1].replace(/,/g, ''), 10)
+      : 0;
+
+    // Original price — try to find a second (higher) price
+    const allPrices = [...html.matchAll(/(\d[\d,]+)\s*원/g)]
+      .map((m) => parseInt(m[1].replace(/,/g, ''), 10))
+      .filter((p) => p > 0);
+    const originalPrice = allPrices.find((p) => p > price) ?? 0;
+
+    if (!ogTitle) return null;
+    return { ogTitle, ogImage, price, originalPrice };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch and parse an inpock page, returning deal blocks after "공구OPEN".
+ */
+async function fetchInpockBlocks(inpockUrl: string): Promise<InpockBlock[]> {
+  const resp = await fetch(inpockUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KkomaBaljaguk/1.0)' },
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+  const html = await resp.text();
+
+  // Extract __NEXT_DATA__ JSON from <script id="__NEXT_DATA__">
+  const match = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!match) throw new Error('__NEXT_DATA__ not found');
+
+  const nextData = JSON.parse(match[1]);
+  const blocks: InpockBlock[] = nextData?.props?.pageProps?.blocks ?? [];
+
+  // Find the index of the "공구OPEN" label block
+  const openIdx = blocks.findIndex(
+    (b) => b.block_type === 'label' && b.title?.includes('공구') && b.title?.includes('OPEN'),
+  );
+  if (openIdx === -1) return [];
+
+  // Return only link blocks that follow the 공구OPEN label
+  const result: InpockBlock[] = [];
+  for (let i = openIdx + 1; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.block_type === 'label') break; // next section starts
+    if (b.block_type === 'link' && b.url) result.push(b);
+  }
+  return result;
+}
+
+export const scrapeInpockDeals = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'Asia/Seoul', memory: '512MiB', timeoutSeconds: 540 },
+  async () => {
+    // Fetch all active influencers
+    const influencersSnap = await db
+      .collection('influencers')
+      .where('active', '==', true)
+      .get();
+
+    if (influencersSnap.empty) {
+      logger.info('[inpock] no active influencers');
+      return;
+    }
+
+    let totalNew = 0;
+
+    for (const infDoc of influencersSnap.docs) {
+      const inf = infDoc.data() as {
+        inpockUrl: string;
+        name: string;
+        instagramId: string;
+      };
+
+      try {
+        const blocks = await fetchInpockBlocks(inf.inpockUrl);
+        logger.info(`[inpock] ${inf.name}: ${blocks.length} deal block(s)`);
+
+        for (const block of blocks) {
+          try {
+            // Resolve short URL to final srookpay URL
+            const finalUrl = await resolveRedirect(block.url!);
+            if (!finalUrl) {
+              logger.warn(`[inpock] ${inf.name}: redirect failed for ${block.url}`);
+              continue;
+            }
+
+            // Fetch og metadata from srookpay page
+            const meta = await fetchSrookpayMeta(finalUrl);
+            if (!meta?.ogTitle) {
+              logger.warn(`[inpock] ${inf.name}: no meta for ${finalUrl}`);
+              continue;
+            }
+
+            // Duplicate check by sourceUrl OR productName+influencer
+            const dupSnap = await db
+              .collection('deals')
+              .where('sourceUrl', '==', finalUrl)
+              .limit(1)
+              .get();
+            if (!dupSnap.empty) continue;
+
+            const dupByName = await db
+              .collection('deals')
+              .where('productName', '==', meta.ogTitle)
+              .where('brand', '==', inf.name)
+              .limit(1)
+              .get();
+            if (!dupByName.empty) continue;
+
+            // Parse timestamps
+            const startAt = block.open_at
+              ? Timestamp.fromDate(new Date(block.open_at))
+              : Timestamp.now();
+            const endAt = block.open_until
+              ? Timestamp.fromDate(new Date(block.open_until))
+              : Timestamp.fromMillis(startAt.toMillis() + 7 * 24 * 60 * 60 * 1000);
+
+            // Save new deal as pending
+            await db.collection('deals').add({
+              productName: meta.ogTitle,
+              brand: inf.name,
+              category: '기타',
+              startAt,
+              endAt,
+              price: meta.price,
+              originalPrice: meta.originalPrice,
+              instagramUrl: `https://www.instagram.com/${inf.instagramId}/`,
+              sourceUrl: finalUrl,
+              thumbnailUrl: meta.ogImage,
+              oembedHtml: '',
+              naverProducts: [],
+              status: 'pending',
+              reporterId: 'system',
+              reporterRole: 'system',
+              createdAt: FieldValue.serverTimestamp(),
+              viewCount: 0,
+            });
+
+            totalNew++;
+            logger.info(`[inpock] saved: ${meta.ogTitle}`);
+
+            // FCM broadcast to consented users
+            const usersSnap = await db
+              .collection('users')
+              .where('notificationConsent', '==', true)
+              .get();
+
+            const tokens = usersSnap.docs
+              .map((d) => ({ token: d.data()['fcmToken'] as string, userId: d.id }))
+              .filter((t) => !!t.token);
+
+            if (tokens.length > 0) {
+              await sendFcmBatch(
+                tokens,
+                { title: '새 공구 등록', body: `${meta.ogTitle} 공구가 시작됐어요!` },
+                { type: 'new_deal' },
+              );
+            }
+          } catch (blockErr) {
+            logger.error(`[inpock] block error (${inf.name} / ${block.url}):`, blockErr);
+          }
+        }
+      } catch (infErr) {
+        logger.error(`[inpock] influencer error (${inf.name}):`, infErr);
+      }
+
+      // Update lastScrapedAt regardless of parse success
+      await infDoc.ref.update({ lastScrapedAt: FieldValue.serverTimestamp() });
+    }
+
+    logger.info(`[inpock] done — ${totalNew} new deal(s) saved`);
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Naver products refresh — daily at 6am KST
 // ─────────────────────────────────────────────────────────────────────────────
 // Calls Naver Shopping API directly (same credentials as OCR server) rather
 // than routing through the OCR server's /naver-refresh HTTP endpoint, which

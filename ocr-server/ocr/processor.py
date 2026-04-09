@@ -17,15 +17,17 @@ _YEAR = 2026
 
 
 def _build_client() -> vision.ImageAnnotatorClient:
-    creds_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON', '')
-    if creds_json:
-        info: dict[str, Any] = json.loads(creds_json)
+    # FIREBASE_CREDENTIALS: base64-encoded service account JSON (Cloud Run env var)
+    creds_b64 = os.getenv('FIREBASE_CREDENTIALS', '')
+    if creds_b64:
+        import base64
+        info: dict[str, Any] = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
         creds = service_account.Credentials.from_service_account_info(
             info,
             scopes=['https://www.googleapis.com/auth/cloud-vision'],
         )
         return vision.ImageAnnotatorClient(credentials=creds)
-    # Fallback: Application Default Credentials (local dev)
+    # Fallback: Application Default Credentials (local dev / Cloud Run default SA)
     return vision.ImageAnnotatorClient()
 
 

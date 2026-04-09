@@ -1,12 +1,11 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Clock, Heart, User } from 'lucide-react';
+import { Home, Plus, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const NAV_ITEMS = [
-  { label: '홈',      path: '/home',     Icon: Home },
-  { label: '타임라인', path: '/',         Icon: Clock },
-  { label: '관심목록', path: '/wishlist', Icon: Heart },
-  { label: '마이페이지', path: '/mypage', Icon: User },
+  { label: '타임라인', path: '/',       Icon: Home },
+  { label: '공유',     path: '/report', Icon: Plus },
+  { label: '내 정보',  path: '/mypage', Icon: User },
 ] as const;
 
 export function BottomNav() {
@@ -19,7 +18,7 @@ export function BottomNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border safe-area-pb">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-stone-200">
       <div className="max-w-lg mx-auto px-4">
         <div className="flex items-center justify-around py-2">
           {NAV_ITEMS.map(({ label, path, Icon }) => {
@@ -31,11 +30,11 @@ export function BottomNav() {
                 aria-label={label}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors',
-                  active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                  'flex flex-col items-center gap-1 px-6 py-2 rounded-lg transition-colors',
+                  active ? 'text-orange-500' : 'text-stone-400 hover:text-stone-600'
                 )}
               >
-                <Icon className={cn('w-5 h-5', active && 'fill-primary/20')} />
+                <Icon className="w-5 h-5" />
                 <span className="text-xs font-medium">{label}</span>
               </button>
             );

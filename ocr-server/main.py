@@ -1,9 +1,11 @@
 import os
+import re
 import base64
 import json
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -143,6 +145,10 @@ async def run_ocr(file: UploadFile = File(...)) -> dict:
     }
 
 
+class ParseUrlRequest(BaseModel):
+    url: str
+
+
 class NaverRefreshRequest(BaseModel):
     dealId: str
     productName: str
@@ -186,3 +192,164 @@ async def naver_refresh(
     })
 
     return {'ok': True, 'products': products}
+
+
+# ── Inpock parsing ────────────────────────────────────────────────────────────
+
+_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (compatible; KkomaBaljaguk/1.0)',
+    'Accept-Language': 'ko-KR,ko;q=0.9',
+}
+
+
+def _extract_og(html: str, property: str) -> str:
+    """Extract a single og: meta content value from HTML."""
+    m = re.search(
+        rf'<meta[^>]+property=["\']og:{property}["\'][^>]+content=["\']([^"\']+)["\']',
+        html,
+        re.IGNORECASE,
+    )
+    if not m:
+        # also handle content-first attribute ordering
+        m = re.search(
+            rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:{property}["\']',
+            html,
+            re.IGNORECASE,
+        )
+    return m.group(1) if m else ''
+
+
+@app.post('/parse-inpock')
+async def parse_inpock(body: ParseUrlRequest) -> list:
+    """
+    Fetch an inpock.co.kr page, parse __NEXT_DATA__, and return deal blocks
+    that appear after the '공구OPEN' label section.
+
+    Returns a list of:
+      { title, image, url, open_at, open_until }
+    """
+    url = body.url.strip()
+    if 'link.inpock.co.kr' not in url:
+        raise HTTPException(status_code=400, detail='인포크 링크가 아니에요.')
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+        try:
+            resp = await client.get(url, headers=_HEADERS)
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f'인포크 페이지를 불러올 수 없어요: {e}')
+
+    html = resp.text
+
+    # Extract __NEXT_DATA__ JSON from script tag
+    m = re.search(
+        r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    if not m:
+        raise HTTPException(status_code=422, detail='__NEXT_DATA__를 찾을 수 없어요.')
+
+    try:
+        next_data: dict = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail='__NEXT_DATA__ 파싱에 실패했어요.')
+
+    blocks: list[dict] = (
+        next_data
+        .get('props', {})
+        .get('pageProps', {})
+        .get('blocks', [])
+    )
+
+    # Find the index of the '공구OPEN' label block (handles spaces between chars)
+    open_idx = None
+    for i, block in enumerate(blocks):
+        title: str = block.get('title', '') or ''
+        btype: str = block.get('block_type', '') or ''
+        if btype == 'label' and re.search(r'공\s*구\s*O\s*P\s*E\s*N', title, re.IGNORECASE):
+            open_idx = i
+            break
+
+    if open_idx is None:
+        # No label found — return all link blocks as fallback
+        link_blocks = [b for b in blocks if b.get('block_type') == 'link']
+    else:
+        # Collect link blocks after the label; stop at the next label
+        link_blocks = []
+        for block in blocks[open_idx + 1:]:
+            btype = block.get('block_type', '')
+            if btype == 'label':
+                break
+            if btype == 'link':
+                link_blocks.append(block)
+
+    return [
+        {
+            'title': block.get('title') or '',
+            'image': block.get('image') or '',
+            'url': block.get('url') or '',
+            'open_at': block.get('open_at'),
+            'open_until': block.get('open_until'),
+        }
+        for block in link_blocks
+    ]
+
+
+# ── Srookpay / srok.kr parsing ────────────────────────────────────────────────
+
+@app.post('/parse-srookpay')
+async def parse_srookpay(body: ParseUrlRequest) -> dict:
+    """
+    Fetch a srookpay or srok.kr product page and return:
+      { productName, thumbnailUrl, price, originalPrice }
+
+    Follows redirects automatically (srok.kr short links resolve to shop.srookpay.com).
+    """
+    url = body.url.strip()
+    if not any(d in url for d in ('shop.srookpay.com', 'srok.kr')):
+        raise HTTPException(status_code=400, detail='스룩페이 링크가 아니에요.')
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+        try:
+            resp = await client.get(url, headers=_HEADERS)
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f'스룩페이 페이지를 불러올 수 없어요: {e}')
+
+    html = resp.text
+
+    product_name = _extract_og(html, 'title')
+    thumbnail_url = _extract_og(html, 'image')
+
+    # Extract sale price — try common label patterns first, then JSON-LD
+    price = ''
+    for pattern in (
+        r'공구가[^0-9]*([0-9,]+)\s*원',
+        r'판매가[^0-9]*([0-9,]+)\s*원',
+        r'할인가[^0-9]*([0-9,]+)\s*원',
+        r'"price"\s*:\s*"?([0-9,]+)"?',
+    ):
+        pm = re.search(pattern, html)
+        if pm:
+            price = pm.group(1).replace(',', '') + '원'
+            break
+
+    # Extract original price
+    original_price = ''
+    for pattern in (
+        r'정가[^0-9]*([0-9,]+)\s*원',
+        r'소비자가[^0-9]*([0-9,]+)\s*원',
+        r'원가[^0-9]*([0-9,]+)\s*원',
+    ):
+        pm = re.search(pattern, html)
+        if pm:
+            original_price = pm.group(1).replace(',', '') + '원'
+            break
+
+    return {
+        'productName': product_name,
+        'thumbnailUrl': thumbnail_url,
+        'price': price,
+        'originalPrice': original_price,
+    }

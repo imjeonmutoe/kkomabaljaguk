@@ -18,12 +18,16 @@ export interface Deal {
   startAt: Timestamp;
   endAt: Timestamp;
   price: number;
+  originalPrice: number;
+  thumbnailUrl: string;
+  sourceUrl: string;
   instagramUrl: string;
   oembedHtml: string;
   naverProducts: NaverProduct[];
   naverUpdatedAt: Timestamp | null;
   status: DealStatus;
   reporterId: string;
+  reporterRole: 'user' | 'influencer' | 'system';
   createdAt: Timestamp;
   approvedAt?: Timestamp | null;
   viewCount: number;
