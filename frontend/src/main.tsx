@@ -27,7 +27,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
               installingWorker.state === 'installed' &&
               navigator.serviceWorker.controller
             ) {
-              showUpdateBanner(registration);
+              showUpdateBanner(installingWorker);
             }
           });
         });
@@ -50,7 +50,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 // Injected outside React so it works regardless of router state.
 // Inline styles are intentional — Tailwind purges classes not in source files.
 
-function showUpdateBanner(registration: ServiceWorkerRegistration): void {
+function showUpdateBanner(waitingWorker: ServiceWorker): void {
   if (document.getElementById('sw-update-banner')) return; // already shown
 
   const banner = document.createElement('div');
@@ -93,8 +93,9 @@ function showUpdateBanner(registration: ServiceWorkerRegistration): void {
 
   refreshBtn.addEventListener('click', () => {
     // Tell the waiting SW to activate immediately
-    registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
-    // controllerchange listener above will reload the page
+    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    // controllerchange listener above will reload — fallback in case it doesn't fire
+    setTimeout(() => window.location.reload(), 1000);
   });
 
   banner.appendChild(message);
