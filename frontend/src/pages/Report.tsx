@@ -176,6 +176,7 @@ export function Report() {
   // Inpock mode
   const [inpockItems, setInpockItems] = useState<InpockItem[]>([]);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
+  const [inpockCategoryErrors, setInpockCategoryErrors] = useState<Record<string, boolean>>({});
 
   // Srookpay mode
   const [srookpayForm, setSrookpayForm] = useState<SrookpayForm>({
@@ -413,8 +414,11 @@ export function Report() {
         setParseError('제보할 항목을 하나 이상 선택해 주세요.');
         return;
       }
-      if (checked.some((i) => !i.category)) {
-        setParseError('선택된 모든 항목에 카테고리를 설정해 주세요.');
+      const missingCategory = checked.filter((i) => !i.category);
+      if (missingCategory.length > 0) {
+        const errors: Record<string, boolean> = {};
+        missingCategory.forEach((i) => { errors[i.id] = true; });
+        setInpockCategoryErrors(errors);
         return;
       }
     } else {
@@ -646,13 +650,17 @@ export function Report() {
                   <div className="ml-7 flex flex-col gap-2">
                     <select
                       value={item.category}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const val = e.target.value;
                         setInpockItems((p) =>
                           p.map((i) =>
-                            i.id === item.id ? { ...i, category: e.target.value } : i,
+                            i.id === item.id ? { ...i, category: val } : i,
                           )
-                        )
-                      }
+                        );
+                        if (val) {
+                          setInpockCategoryErrors((p) => { const next = { ...p }; delete next[item.id]; return next; });
+                        }
+                      }}
                       className="border border-stone-200 bg-white rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
                     >
                       <option value="">카테고리 선택</option>
@@ -660,6 +668,9 @@ export function Report() {
                         <option key={c.id} value={c.id}>{c.label}</option>
                       ))}
                     </select>
+                    {item.checked && inpockCategoryErrors[item.id] && (
+                      <p className="text-red-500 text-sm">카테고리를 선택해 주세요.</p>
+                    )}
                     {(item.openAt !== null || item.openUntil !== null) && (
                       <div className="grid grid-cols-2 gap-2">
                         {item.openAt !== null && (
