@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   collection, addDoc, serverTimestamp, getDoc, doc,
 } from 'firebase/firestore';
+import { ImageOff } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
 import { Footer } from '../components/Footer';
 import { DEAL_CATEGORIES } from '../lib/categories';
@@ -72,6 +73,14 @@ function detectMode(url: string): Exclude<InputMode, 'ocr'> {
 /** Prepend https: to protocol-relative URLs */
 function fixUrl(url: string): string {
   return url.startsWith('//') ? `https:${url}` : url;
+}
+
+/** Normalize inpock image URLs: protocol-relative, relative, or absolute */
+function fixInpockImageUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('//')) return `https:${url}`;
+  if (url.startsWith('http')) return url;
+  return `https://link.inpock.co.kr/${url}`;
 }
 
 // ── Field wrapper ─────────────────────────────────────────────────────────────
@@ -166,6 +175,7 @@ export function Report() {
 
   // Inpock mode
   const [inpockItems, setInpockItems] = useState<InpockItem[]>([]);
+  const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
 
   // Srookpay mode
   const [srookpayForm, setSrookpayForm] = useState<SrookpayForm>({
@@ -272,15 +282,21 @@ export function Report() {
     };
     const blocks: RawBlock[] = await res.json();
 
-    // Only include blocks with srookpay URLs
-    const SROOKPAY_DOMAINS = ['srookpay.com', 'srok.kr', 'shop.srookpay'];
-    const items = blocks.filter((b) => b.url && SROOKPAY_DOMAINS.some((d) => b.url.includes(d)));
+    // Exclude file/doc links; include all other blocks that have a URL
+    const EXCLUDED_PATTERNS = ['drive.google.com', 'docs.google.com'];
+    const items = blocks.filter((b) => {
+      if (!b.url) return false;
+      if (b.url.startsWith('mailto:')) return false;
+      if (EXCLUDED_PATTERNS.some((p) => b.url.includes(p))) return false;
+      return true;
+    });
 
+    setImgErrors({});
     setInpockItems(
       items.map((item, i) => ({
         id: String(i),
         title: item.title,
-        imageUrl: item.image ? fixUrl(item.image) : '',
+        imageUrl: item.image ? fixInpockImageUrl(item.image) : '',
         url: item.url,
         openAt: item.open_at ? toDatetimeLocal(item.open_at) : null,
         openUntil: item.open_until ? toDatetimeLocal(item.open_until) : null,
@@ -589,7 +605,25 @@ export function Report() {
             <ul className="divide-y divide-stone-100">
               {inpockItems.map((item) => (
                 <li key={item.id} className="px-4 py-3 flex flex-col gap-2">
-                  {/* Checkbox + thumbnail + title row */}
+                  {/* Thumbnail — full width, fixed height */}
+                  {item.imageUrl && (
+                    <div className="h-32 w-full overflow-hidden rounded-lg bg-stone-100">
+                      {imgErrors[item.id] ? (
+                        <div className="h-full w-full flex items-center justify-center bg-stone-100">
+                          <ImageOff className="w-8 h-8 text-stone-400" />
+                        </div>
+                      ) : (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                          onError={() => setImgErrors((p) => ({ ...p, [item.id]: true }))}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {/* Checkbox + title row */}
                   <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
@@ -604,14 +638,6 @@ export function Report() {
                       }
                       className="w-4 h-4 rounded accent-orange-500 cursor-pointer flex-shrink-0 mt-1"
                     />
-                    {item.imageUrl && (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.title}
-                        loading="lazy"
-                        className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-stone-100"
-                      />
-                    )}
                     <label htmlFor={`item-${item.id}`} className="flex-1 cursor-pointer min-w-0">
                       <p className="text-sm font-medium text-stone-900 line-clamp-2">{item.title}</p>
                     </label>
@@ -634,38 +660,44 @@ export function Report() {
                         <option key={c.id} value={c.id}>{c.label}</option>
                       ))}
                     </select>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[11px] text-stone-500">시작일</span>
-                        <input
-                          type="datetime-local"
-                          value={item.openAt ?? ''}
-                          onChange={(e) =>
-                            setInpockItems((p) =>
-                              p.map((i) =>
-                                i.id === item.id ? { ...i, openAt: e.target.value } : i,
-                              )
-                            )
-                          }
-                          className="border border-stone-200 bg-white rounded-xl px-2 py-1.5 text-[11px] text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
-                        />
+                    {(item.openAt !== null || item.openUntil !== null) && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {item.openAt !== null && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] text-stone-500">시작일</span>
+                            <input
+                              type="datetime-local"
+                              value={item.openAt}
+                              onChange={(e) =>
+                                setInpockItems((p) =>
+                                  p.map((i) =>
+                                    i.id === item.id ? { ...i, openAt: e.target.value } : i,
+                                  )
+                                )
+                              }
+                              className="border border-stone-200 bg-white rounded-xl px-2 py-1.5 text-[11px] text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
+                            />
+                          </div>
+                        )}
+                        {item.openUntil !== null && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] text-stone-500">종료일</span>
+                            <input
+                              type="datetime-local"
+                              value={item.openUntil}
+                              onChange={(e) =>
+                                setInpockItems((p) =>
+                                  p.map((i) =>
+                                    i.id === item.id ? { ...i, openUntil: e.target.value } : i,
+                                  )
+                                )
+                              }
+                              className="border border-stone-200 bg-white rounded-xl px-2 py-1.5 text-[11px] text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
+                            />
+                          </div>
+                        )}
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[11px] text-stone-500">종료일</span>
-                        <input
-                          type="datetime-local"
-                          value={item.openUntil ?? ''}
-                          onChange={(e) =>
-                            setInpockItems((p) =>
-                              p.map((i) =>
-                                i.id === item.id ? { ...i, openUntil: e.target.value } : i,
-                              )
-                            )
-                          }
-                          className="border border-stone-200 bg-white rounded-xl px-2 py-1.5 text-[11px] text-stone-900 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
-                        />
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </li>
               ))}
