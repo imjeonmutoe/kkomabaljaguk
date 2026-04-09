@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 // Lazy-load pages to keep initial bundle small
 const Timeline = lazy(() => import('./pages/Timeline').then((m) => ({ default: m.Timeline })));
-const DealDetail = lazy(() => import('./pages/DealDetail').then((m) => ({ default: m.DealDetail })));
 const Report = lazy(() => import('./pages/Report').then((m) => ({ default: m.Report })));
 const Admin = lazy(() => import('./pages/Admin').then((m) => ({ default: m.Admin })));
 const Privacy = lazy(() => import('./pages/Privacy').then((m) => ({ default: m.Privacy })));
@@ -24,7 +23,6 @@ export default function App() {
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Timeline />} />
-          <Route path="/deal/:dealId" element={<DealDetail />} />
           <Route path="/report" element={<Report />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/privacy" element={<Privacy />} />

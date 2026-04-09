@@ -1,5 +1,4 @@
 import { memo, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Clock, Users, Heart, Bell, BellOff } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -94,7 +93,6 @@ function toggleAlarmedId(dealId: string): boolean {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export const DealCard = memo(function DealCard({ deal }: Props) {
-  const navigate = useNavigate();
   const phase = getPhase(deal);
   const discount = getDiscountRate(deal);
   const remaining = timeRemaining(deal.endAt);
@@ -122,9 +120,9 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
     <Card
       role="button"
       tabIndex={0}
-      aria-label={`${deal.productName} 상세 보기`}
-      onClick={() => navigate(`/deal/${deal.id}`)}
-      onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && navigate(`/deal/${deal.id}`)}
+      aria-label={`${deal.productName} 바로가기`}
+      onClick={() => deal.sourceUrl && window.open(deal.sourceUrl, '_blank', 'noopener,noreferrer')}
+      onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && deal.sourceUrl && window.open(deal.sourceUrl, '_blank', 'noopener,noreferrer')}
       className="mb-0 overflow-hidden hover:shadow-lg active:scale-[0.99] transition-all duration-150 cursor-pointer"
     >
       <div className="flex">
