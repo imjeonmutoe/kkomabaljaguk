@@ -284,16 +284,40 @@ async def parse_inpock(body: ParseUrlRequest) -> list:
             if btype == 'link':
                 link_blocks.append(block)
 
-    return [
-        {
+    async def _resolve_image(block: dict) -> str | None:
+        raw_img: str = block.get('image') or ''
+        block_url: str = block.get('url') or ''
+
+        # Already an absolute URL
+        if raw_img.startswith('http://') or raw_img.startswith('https://'):
+            return raw_img
+        # Protocol-relative → normalise to https
+        if raw_img.startswith('//'):
+            return 'https:' + raw_img
+        # Relative path — fetch block.url and extract og:image
+        if raw_img and block_url:
+            try:
+                async with httpx.AsyncClient(follow_redirects=True, timeout=5) as c:
+                    r = await c.get(block_url, headers=_HEADERS)
+                    r.raise_for_status()
+                og = _extract_og(r.text, 'image')
+                if og:
+                    return 'https:' + og if og.startswith('//') else og
+            except Exception:
+                pass
+        return None
+
+    results = []
+    for block in link_blocks:
+        image = await _resolve_image(block)
+        results.append({
             'title': block.get('title') or '',
-            'image': block.get('image') or '',
+            'image': image,
             'url': block.get('url') or '',
             'open_at': block.get('open_at'),
             'open_until': block.get('open_until'),
-        }
-        for block in link_blocks
-    ]
+        })
+    return results
 
 
 # ── Srookpay / srok.kr parsing ────────────────────────────────────────────────
