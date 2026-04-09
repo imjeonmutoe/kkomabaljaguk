@@ -460,6 +460,7 @@ export function Report() {
             return '';
           }
         })();
+        console.log('[Report] inpockBrand:', inpockBrand, '| linkInput:', linkInput.trim());
         await Promise.all(
           checked.map((item) =>
             addDoc(collection(db, 'deals'), {
