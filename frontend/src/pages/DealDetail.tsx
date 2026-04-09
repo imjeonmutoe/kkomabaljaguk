@@ -354,11 +354,56 @@ export function DealDetail() {
           </div>
         </section>
 
-        {/* ── Instagram oEmbed ───────────────────────────────────────── */}
-        <section className="bg-white rounded-2xl p-4 shadow-sm">
-          <h3 className="text-sm font-bold text-gray-700 mb-3">인스타그램 게시물</h3>
-          <OEmbed instagramUrl={deal.instagramUrl} cachedHtml={deal.oembedHtml || undefined} />
-        </section>
+        {/* ── Instagram oEmbed or Product summary card ───────────────── */}
+        {deal.instagramUrl ? (
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <h3 className="text-sm font-bold text-gray-700 mb-3">인스타그램 게시물</h3>
+            <OEmbed instagramUrl={deal.instagramUrl} cachedHtml={deal.oembedHtml || undefined} />
+          </section>
+        ) : (
+          <section className="bg-white rounded-2xl shadow-sm border border-stone-200 p-4 flex flex-col gap-3">
+            {/* Thumbnail */}
+            {deal.thumbnailUrl && (
+              <img
+                src={deal.thumbnailUrl}
+                alt={deal.productName}
+                loading="lazy"
+                className="w-full object-cover rounded-xl max-h-64"
+              />
+            )}
+
+            {/* Description */}
+            {deal.description && (
+              <p className="text-stone-600 text-sm line-clamp-3">{deal.description}</p>
+            )}
+
+            {/* Price */}
+            {deal.price > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-orange-500 font-bold text-lg">
+                  {deal.price.toLocaleString('ko-KR')}원
+                </span>
+                {deal.originalPrice > 0 && (
+                  <span className="text-stone-400 text-sm line-through">
+                    {deal.originalPrice.toLocaleString('ko-KR')}원
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Purchase link */}
+            {deal.sourceUrl && (
+              <a
+                href={deal.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl w-full py-4 font-bold text-lg text-center block transition-colors"
+              >
+                구매 페이지로 이동 →
+              </a>
+            )}
+          </section>
+        )}
 
         {/* ── 알림 받기 / 알림 취소 ─────────────────────────────────── */}
         <button

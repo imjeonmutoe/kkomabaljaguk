@@ -20,6 +20,7 @@ export interface Deal {
   price: number;
   originalPrice: number;
   thumbnailUrl: string;
+  description?: string;
   sourceUrl: string;
   instagramUrl: string;
   oembedHtml: string;
