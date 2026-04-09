@@ -272,8 +272,9 @@ export function Report() {
     };
     const blocks: RawBlock[] = await res.json();
 
-    // Only include blocks that have a URL (skip label/decoration blocks)
-    const items = blocks.filter((b) => !!b.url);
+    // Only include blocks with srookpay URLs
+    const SROOKPAY_DOMAINS = ['srookpay.com', 'srok.kr', 'shop.srookpay'];
+    const items = blocks.filter((b) => b.url && SROOKPAY_DOMAINS.some((d) => b.url.includes(d)));
 
     setInpockItems(
       items.map((item, i) => ({
