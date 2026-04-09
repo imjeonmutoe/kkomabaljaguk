@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  collection, doc, onSnapshot, setDoc, getDocs,
+  collection, doc, onSnapshot, setDoc,
   query, where, orderBy, limit, serverTimestamp,
 } from 'firebase/firestore';
 import {
