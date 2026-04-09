@@ -1,5 +1,5 @@
 import { memo, useState, useCallback } from 'react';
-import { Clock, Users, Heart, Bell, BellOff } from 'lucide-react';
+import { Clock, Users, Heart, Bell, BellOff, ExternalLink } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -127,12 +127,12 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
     >
       <div className="flex">
         {/* ── Image ───────────────────────────────────────────────────────── */}
-        <div className="relative w-28 h-28 sm:w-36 sm:h-36 flex-shrink-0">
+        <div className="relative w-32 h-32 sm:w-36 sm:h-36 flex-shrink-0 bg-white rounded-xl border border-stone-100 flex items-center justify-center overflow-hidden m-2">
           <img
             src={image}
             alt={deal.productName}
             loading="lazy"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain p-2"
             onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER; }}
           />
           {isHot && (
@@ -164,9 +164,18 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
               </button>
             </div>
 
-            {/* Brand */}
+            {/* Influencer Instagram link */}
             {deal.brand && (
-              <p className="text-xs text-muted-foreground mb-0.5 truncate">{deal.brand}</p>
+              <a
+                href={`https://instagram.com/${deal.brand}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 text-stone-500 text-xs mb-0.5 hover:text-orange-500 transition-colors w-fit"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span className="truncate max-w-[120px]">@{deal.brand}</span>
+              </a>
             )}
 
             {/* Product name */}
