@@ -165,16 +165,18 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
             </div>
 
             {/* Influencer Instagram link */}
-            {deal.brand && (
+            {deal.instagramUrl && (
               <a
-                href={`https://instagram.com/${deal.brand}`}
+                href={deal.instagramUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1 text-stone-500 text-xs mb-0.5 hover:text-orange-500 transition-colors w-fit"
               >
                 <ExternalLink className="w-3 h-3" />
-                <span className="truncate max-w-[120px]">@{deal.brand}</span>
+                <span className="truncate max-w-[120px]">
+                  @{deal.instagramUrl.replace(/\/$/, '').split('/').filter(Boolean).pop() ?? deal.brand}
+                </span>
               </a>
             )}
 

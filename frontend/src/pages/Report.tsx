@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   collection, addDoc, serverTimestamp, getDoc, doc,
+  query, where, getDocs, updateDoc,
 } from 'firebase/firestore';
 import { ImageOff } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
@@ -198,6 +199,12 @@ export function Report() {
   const [common, setCommon] = useState<CommonFields>(EMPTY_COMMON);
   const [categoryError, setCategoryError] = useState('');
 
+  // Inpock instagram lookup
+  const [inpockInfluencerId, setInpockInfluencerId] = useState<string | null>(null);
+  const [inpockInstagramUrl, setInpockInstagramUrl] = useState('');
+  const [showInstagramInput, setShowInstagramInput] = useState(false);
+  const [instagramInputError, setInstagramInputError] = useState('');
+
   // Submit
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -228,6 +235,10 @@ export function Report() {
   function handleLinkChange(e: React.ChangeEvent<HTMLInputElement>) {
     setLinkInput(e.target.value);
     setParseError(null);
+    setInpockInfluencerId(null);
+    setInpockInstagramUrl('');
+    setShowInstagramInput(false);
+    setInstagramInputError('');
   }
 
   async function handleParse() {
@@ -247,6 +258,7 @@ export function Report() {
     try {
       if (detected === 'inpock') {
         await parseInpock(url);
+        await lookupInpockInfluencer(url);
       } else {
         await parseSrookpay(url);
       }
@@ -305,6 +317,36 @@ export function Report() {
         category: '',
       })),
     );
+  }
+
+  // ── Inpock influencer lookup ───────────────────────────────────────────────
+  async function lookupInpockInfluencer(url: string) {
+    const username = (() => {
+      try {
+        const normalized = url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`;
+        return new URL(normalized).pathname.split('/').filter(Boolean)[0] ?? '';
+      } catch { return ''; }
+    })();
+    if (!username) { setShowInstagramInput(true); return; }
+
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'influencers'), where('inpockUrl', '==', `link.inpock.co.kr/${username}`)),
+      );
+      if (!snap.empty) {
+        const docSnap = snap.docs[0];
+        const igUrl = (docSnap.data().instagramUrl as string | undefined) ?? '';
+        setInpockInfluencerId(docSnap.id);
+        setInpockInstagramUrl(igUrl);
+        setShowInstagramInput(!igUrl);
+      } else {
+        setInpockInfluencerId(null);
+        setShowInstagramInput(true);
+      }
+    } catch {
+      setInpockInfluencerId(null);
+      setShowInstagramInput(true);
+    }
   }
 
   // ── Srookpay parsing ───────────────────────────────────────────────────────
@@ -421,6 +463,11 @@ export function Report() {
         setInpockCategoryErrors(errors);
         return;
       }
+      const igUrl = inpockInstagramUrl.trim();
+      if (igUrl && !igUrl.includes('instagram.com')) {
+        setInstagramInputError('올바른 인스타그램 주소를 입력해주세요');
+        return;
+      }
     } else {
       if (!common.category) {
         setCategoryError('카테고리를 선택해 주세요.');
@@ -460,7 +507,14 @@ export function Report() {
             return '';
           }
         })();
-        console.log('[Report] inpockBrand:', inpockBrand, '| linkInput:', linkInput.trim());
+        const instagramUrl = inpockInstagramUrl.trim();
+        const instagramId = instagramUrl
+          ? instagramUrl.replace(/\/$/, '').split('/').filter(Boolean).pop() ?? ''
+          : '';
+        // Update influencer doc with instagram info if newly provided
+        if (instagramUrl && inpockInfluencerId) {
+          await updateDoc(doc(db, 'influencers', inpockInfluencerId), { instagramUrl, instagramId });
+        }
         await Promise.all(
           checked.map((item) =>
             addDoc(collection(db, 'deals'), {
@@ -470,7 +524,8 @@ export function Report() {
               productName: item.title,
               thumbnailUrl: item.imageUrl,
               sourceUrl: item.url,
-              instagramUrl: '',
+              instagramUrl,
+              instagramId,
               startAt: item.openAt ? new Date(item.openAt) : null,
               endAt: item.openUntil ? new Date(item.openUntil) : null,
               price: 0,
@@ -906,6 +961,42 @@ export function Report() {
                 />
               </Field>
             </div>
+          </div>
+        )}
+
+        {/* ── Inpock: instagram input ──────────────────────────────────── */}
+        {mode === 'inpock' && inpockItems.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-4 flex flex-col gap-2">
+            <p className="text-xs font-semibold text-stone-700">인스타그램 계정</p>
+            {inpockInstagramUrl && !showInstagramInput ? (
+              <div className="flex items-center gap-2">
+                <a
+                  href={inpockInstagramUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-orange-500 hover:underline truncate"
+                >
+                  {inpockInstagramUrl}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowInstagramInput(true)}
+                  className="text-xs text-stone-400 hover:text-stone-600 flex-shrink-0"
+                >
+                  수정
+                </button>
+              </div>
+            ) : (
+              <Field label="이 인플루언서의 인스타그램 주소를 입력해주세요" error={instagramInputError} hint="선택사항 — 입력 안 해도 제보 가능해요">
+                <input
+                  type="url"
+                  value={inpockInstagramUrl}
+                  onChange={(e) => { setInpockInstagramUrl(e.target.value); setInstagramInputError(''); }}
+                  placeholder="https://www.instagram.com/계정명"
+                  className="border border-stone-200 rounded-xl px-4 py-2 w-full text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:border-orange-400 focus:ring-orange-400 transition-colors"
+                />
+              </Field>
+            )}
           </div>
         )}
 
