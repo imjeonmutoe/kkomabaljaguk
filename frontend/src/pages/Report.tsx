@@ -335,7 +335,12 @@ export function Report() {
       );
       if (!snap.empty) {
         const docSnap = snap.docs[0];
-        const igUrl = (docSnap.data().instagramUrl as string | undefined) ?? '';
+        const data = docSnap.data();
+        // Fall back to constructing instagramUrl from instagramId if the field is missing
+        const instagramId = (data.instagramId as string | undefined) ?? '';
+        const igUrl =
+          (data.instagramUrl as string | undefined) ||
+          (instagramId ? `https://www.instagram.com/${instagramId}/` : '');
         setInpockInfluencerId(docSnap.id);
         setInpockInstagramUrl(igUrl);
         setShowInstagramInput(!igUrl);
