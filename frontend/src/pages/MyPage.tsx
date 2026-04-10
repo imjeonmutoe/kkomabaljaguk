@@ -294,6 +294,11 @@ export function MyPage() {
   const uid = user?.uid ?? null;
   const isAnon = user?.isAnonymous ?? true;
 
+  // Auto-close login modal as soon as auth state becomes non-anonymous
+  useEffect(() => {
+    if (!isAnon && showLogin) setShowLogin(false);
+  }, [isAnon, showLogin]);
+
   // ── Wishlist subscription ─────────────────────────────────────────────────
   useEffect(() => {
     if (!uid) { setWishLoading(false); return; }
