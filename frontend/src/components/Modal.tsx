@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 interface ModalProps {
   /** Called when the backdrop is clicked. Omit to disable click-outside dismiss. */
