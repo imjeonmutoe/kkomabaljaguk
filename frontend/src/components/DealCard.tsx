@@ -93,6 +93,9 @@ function toggleAlarmedId(dealId: string): boolean {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export const DealCard = memo(function DealCard({ deal }: Props) {
+  // DEBUG: log instagram fields to diagnose missing link
+  console.log('[DealCard] deal.id:', deal.id, '| instagramUrl:', deal.instagramUrl, '| brand:', deal.brand);
+
   const phase = getPhase(deal);
   const discount = getDiscountRate(deal);
   const remaining = timeRemaining(deal.endAt);
