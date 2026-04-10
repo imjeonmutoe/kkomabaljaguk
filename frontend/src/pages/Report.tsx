@@ -521,8 +521,8 @@ export function Report() {
           await updateDoc(doc(db, 'influencers', inpockInfluencerId), { instagramUrl, instagramId });
         }
         await Promise.all(
-          checked.map((item) =>
-            addDoc(collection(db, 'deals'), {
+          checked.map((item) => {
+            const dealData = {
               ...base,
               brand: inpockBrand,
               category: item.category, // per-item category
@@ -535,8 +535,20 @@ export function Report() {
               endAt: item.openUntil ? new Date(item.openUntil) : null,
               price: 0,
               originalPrice: 0,
-            }),
-          ),
+            };
+            // DEBUG: log full deal data before save — remove after diagnosis
+            console.log('[Report] dealData before save:', {
+              brand: dealData.brand,
+              instagramUrl: dealData.instagramUrl,
+              instagramId: dealData.instagramId,
+              linkInput,
+              inpockBrand,
+              inpockInstagramUrl,
+              inpockInfluencerId,
+              full: dealData,
+            });
+            return addDoc(collection(db, 'deals'), dealData);
+          }),
         );
       } else if (mode === 'srookpay') {
         const parseNum = (s: string) => parseInt(s.replace(/[^0-9]/g, ''), 10) || 0;
