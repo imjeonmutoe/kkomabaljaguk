@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useFCM } from '../hooks/useFCM';
+import { Modal } from './Modal';
 
 const CONSENT_KEY = 'fcm_consent_shown';
 
@@ -48,12 +49,7 @@ export function PushConsent() {
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="push-consent-title"
-    >
+    <Modal aria-labelledby="push-consent-title">
       <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
         {/* 아이콘 */}
         <div className="flex justify-center mb-3">
@@ -113,6 +109,6 @@ export function PushConsent() {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

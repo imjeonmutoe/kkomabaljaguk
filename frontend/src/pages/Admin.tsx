@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { DEAL_CATEGORIES } from '../lib/categories';
+import { Modal } from '../components/Modal';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import type { Deal, NaverProduct } from '../types';
 
@@ -86,10 +87,7 @@ interface DeleteConfirmModalProps {
 
 function DeleteConfirmModal({ onConfirm, onCancel, deleting }: DeleteConfirmModalProps) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
+    <Modal onClose={onCancel}>
       <div className="bg-white rounded-2xl shadow-lg border border-stone-200 w-full max-w-sm p-6">
         <h2 className="text-base font-bold text-stone-900 mb-2">딜 삭제</h2>
         <p className="text-sm text-stone-500 mb-6 leading-relaxed">
@@ -112,7 +110,7 @@ function DeleteConfirmModal({ onConfirm, onCancel, deleting }: DeleteConfirmModa
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -185,14 +183,11 @@ function EditModal({ deal, onClose, onSave }: EditModalProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[90vh] overflow-y-auto">
+    <Modal onClose={onClose}>
+      <div className="bg-white w-full max-w-lg rounded-3xl max-h-[90vh] overflow-y-auto">
 
         {/* Modal header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-3xl sm:rounded-t-3xl z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-3xl z-10">
           <h2 className="text-sm font-bold text-gray-900">딜 수정</h2>
           <button
             onClick={onClose}
@@ -347,7 +342,7 @@ function EditModal({ deal, onClose, onSave }: EditModalProps) {
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -11,6 +11,7 @@ import {
 import { Bell, BellOff, Heart, User, ChevronRight, X } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import { BottomNav } from '../components/BottomNav';
+import { Modal } from '../components/Modal';
 import { getCategoryDef } from '../lib/categories';
 import type { Deal, Alarm } from '../types/index';
 
@@ -76,7 +77,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+    <Modal onClose={onClose} aria-labelledby="login-modal-title">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -127,7 +128,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
           강제가 아니에요. 언제든지 익명으로 이용할 수 있어요.
         </p>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -139,10 +140,7 @@ function DeleteConfirmModal({ onConfirm, onCancel, deleting }: {
   deleting: boolean;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
+    <Modal onClose={onCancel}>
       <div className="bg-white rounded-2xl shadow-lg border border-stone-200 w-full max-w-sm p-6">
         <h2 className="text-base font-bold text-stone-900 mb-2">제보 삭제</h2>
         <p className="text-sm text-stone-500 mb-6 leading-relaxed">
@@ -165,7 +163,7 @@ function DeleteConfirmModal({ onConfirm, onCancel, deleting }: {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
