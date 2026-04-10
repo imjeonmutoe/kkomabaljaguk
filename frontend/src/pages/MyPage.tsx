@@ -4,10 +4,7 @@ import {
   collection, doc, onSnapshot, setDoc, deleteDoc,
   query, where, orderBy, limit, serverTimestamp,
 } from 'firebase/firestore';
-import {
-  signInWithPopup, linkWithPopup,
-  GoogleAuthProvider,
-} from 'firebase/auth';
+import { signInWithRedirect, linkWithRedirect } from 'firebase/auth';
 import { Bell, BellOff, Heart, User, ChevronRight, X } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import { BottomNav } from '../components/BottomNav';
@@ -56,22 +53,14 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     try {
       const user = auth.currentUser;
       if (user?.isAnonymous) {
-        // Link anonymous account to Google
-        await linkWithPopup(user, googleProvider);
+        // Link anonymous account to Google (redirect — no popup)
+        await linkWithRedirect(user, googleProvider);
       } else {
-        await signInWithPopup(auth, googleProvider);
+        await signInWithRedirect(auth, googleProvider);
       }
-      onClose();
-    } catch (err: unknown) {
-      const e = err as { code?: string };
-      if (e.code === 'auth/credential-already-in-use') {
-        // Already linked elsewhere — sign in directly
-        await signInWithPopup(auth, new GoogleAuthProvider());
-        onClose();
-      } else {
-        setError('로그인 중 오류가 발생했어요. 다시 시도해 주세요.');
-      }
-    } finally {
+      // Page will redirect to Google; onClose is not needed here
+    } catch {
+      setError('로그인 중 오류가 발생했어요. 다시 시도해 주세요.');
       setLoading(false);
     }
   }
