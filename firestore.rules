@@ -16,10 +16,8 @@ service cloud.firestore {
 
     // ── deals ──────────────────────────────────────────────────────────────
     match /deals/{dealId} {
-      // Anyone can read approved deals; admins read all; reporters read their own
-      allow read: if resource.data.status == 'approved'
-        || isAdmin()
-        || (isSignedIn() && resource.data.reporterId == request.auth.uid);
+      // Signed-in users (including anonymous) can read all deals; admins read all
+      allow read: if isSignedIn() || isAdmin();
 
       // Any authenticated user can create (submit a deal report → status: 'pending')
       allow create: if isSignedIn()
