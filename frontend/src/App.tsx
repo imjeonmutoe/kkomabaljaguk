@@ -1,7 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { getRedirectResult } from 'firebase/auth';
-import { auth } from './lib/firebase';
 
 // Lazy-load pages to keep initial bundle small
 const Timeline = lazy(() => import('./pages/Timeline').then((m) => ({ default: m.Timeline })));
@@ -19,20 +17,9 @@ function PageLoader() {
   );
 }
 
-// Handle Google redirect result on app load (after signInWithRedirect / linkWithRedirect)
-function RedirectHandler() {
-  useEffect(() => {
-    getRedirectResult(auth).catch(() => {
-      // auth/credential-already-in-use: user already linked elsewhere, ignore
-    });
-  }, []);
-  return null;
-}
-
 export default function App() {
   return (
     <BrowserRouter>
-      <RedirectHandler />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Timeline />} />

@@ -4,7 +4,7 @@ import {
   collection, doc, onSnapshot, setDoc, deleteDoc,
   query, where, orderBy, limit, serverTimestamp,
 } from 'firebase/firestore';
-import { signInWithRedirect, linkWithRedirect } from 'firebase/auth';
+import { signInWithPopup, linkWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { Bell, BellOff, Heart, User, ChevronRight, X } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import { BottomNav } from '../components/BottomNav';
@@ -53,14 +53,20 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     try {
       const user = auth.currentUser;
       if (user?.isAnonymous) {
-        // Link anonymous account to Google (redirect — no popup)
-        await linkWithRedirect(user, googleProvider);
+        await linkWithPopup(user, googleProvider);
       } else {
-        await signInWithRedirect(auth, googleProvider);
+        await signInWithPopup(auth, googleProvider);
       }
-      // Page will redirect to Google; onClose is not needed here
-    } catch {
-      setError('로그인 중 오류가 발생했어요. 다시 시도해 주세요.');
+      onClose();
+    } catch (err: unknown) {
+      const e = err as { code?: string };
+      if (e.code === 'auth/credential-already-in-use') {
+        await signInWithPopup(auth, new GoogleAuthProvider());
+        onClose();
+      } else if (e.code !== 'auth/popup-closed-by-user') {
+        setError('로그인 중 오류가 발생했어요. 다시 시도해 주세요.');
+      }
+    } finally {
       setLoading(false);
     }
   }
@@ -88,7 +94,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
         <button
           onClick={handleGoogle}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 border border-stone-200 rounded-xl py-3 text-sm font-semibold text-stone-700 hover:bg-stone-50 active:scale-[0.98] transition-all disabled:opacity-50 mb-3"
+          className="w-full flex items-center justify-center gap-3 border border-stone-200 rounded-xl py-3 text-sm font-semibold text-stone-700 hover:bg-stone-50 active:scale-[0.98] transition-all disabled:opacity-50"
         >
           {/* Google G icon */}
           <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -99,6 +105,11 @@ function LoginModal({ onClose }: { onClose: () => void }) {
           </svg>
           {loading ? '로그인 중...' : '구글로 계속하기'}
         </button>
+        {!loading && (
+          <p className="text-[11px] text-stone-400 text-center mt-1.5 mb-2">
+            버튼을 누르면 구글 로그인 창이 열려요
+          </p>
+        )}
 
         {/* Kakao login — placeholder (not yet implemented) */}
         <button
