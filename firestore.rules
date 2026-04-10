@@ -38,6 +38,11 @@ service cloud.firestore {
     match /users/{userId} {
       // Users can only read and write their own document
       allow read, write: if isSignedIn() && request.auth.uid == userId;
+
+      // Wishlist subcollection
+      match /wishlist/{dealId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     // ── alarms ─────────────────────────────────────────────────────────────
