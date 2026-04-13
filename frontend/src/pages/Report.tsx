@@ -295,27 +295,45 @@ export function Report() {
     };
     const blocks: RawBlock[] = await res.json();
 
-    // Exclude social/doc links; include all other blocks that have a URL
-    const EXCLUDED_PATTERNS = ['kakao', 'brand', 'drive.google.com', 'docs.google.com'];
+    // Patterns that indicate a deal item (auto-check)
+    const AUTO_INCLUDE_DOMAINS = [
+      'srok.kr', 'srookpay.com', 'mkt.shopping.naver.com',
+      'cafe24.com', 'mowm.co.kr',
+    ];
+    // Patterns that are definitely not deals (hide entirely)
+    const EXCLUDED_DOMAINS = [
+      'pf.kakao.com', 'open.kakao.com', 'kakaocdn.net',
+      'drive.google.com', 'docs.google.com',
+      'notion.so', 'youtube.com', 'instagram.com',
+      'link.coupang.com', 'naver.me', 'talk.naver.com',
+      'buddy.oasis.co.kr', 'sanjitalk.com',
+    ];
+
     const items = blocks.filter((b) => {
       if (!b.url) return false;
       if (b.url.startsWith('mailto:')) return false;
-      if (EXCLUDED_PATTERNS.some((p) => b.url.includes(p))) return false;
+      // Hide excluded domains entirely
+      if (EXCLUDED_DOMAINS.some((d) => b.url.includes(d))) return false;
       return true;
     });
 
     setImgErrors({});
     setInpockItems(
-      items.map((item, i) => ({
-        id: String(i),
-        title: item.title,
-        imageUrl: item.image ? fixInpockImageUrl(item.image) : '',
-        url: item.url,
-        openAt: item.open_at ? toDatetimeLocal(item.open_at) : null,
-        openUntil: item.open_until ? toDatetimeLocal(item.open_until) : null,
-        checked: true,
-        category: '',
-      })),
+      items.map((item, i) => {
+        const isAutoInclude =
+          !!item.open_at ||
+          AUTO_INCLUDE_DOMAINS.some((d) => item.url.includes(d));
+        return {
+          id: String(i),
+          title: item.title,
+          imageUrl: item.image ? fixInpockImageUrl(item.image) : '',
+          url: item.url,
+          openAt: item.open_at ? toDatetimeLocal(item.open_at) : null,
+          openUntil: item.open_until ? toDatetimeLocal(item.open_until) : null,
+          checked: isAutoInclude,
+          category: '',
+        };
+      }),
     );
   }
 
