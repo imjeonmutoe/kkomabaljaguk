@@ -1,5 +1,5 @@
 import { memo, useState, useCallback } from 'react';
-import { Clock, Users, Heart, Bell, BellOff, ExternalLink } from 'lucide-react';
+import { Clock, Users, Heart, Bell, BellOff, ExternalLink, ImageOff } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -14,9 +14,6 @@ interface Props {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatPrice(price: number): string {
-  return price > 0 ? `${price.toLocaleString('ko-KR')}원` : '가격 미정';
-}
 
 type DealPhase = 'ended' | 'active' | 'soon' | 'upcoming';
 
@@ -100,12 +97,9 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
   const discount = getDiscountRate(deal);
   const remaining = timeRemaining(deal.endAt);
   const isHot = deal.viewCount >= 50 || (phase === 'active' && deal.viewCount >= 20);
-  const PLACEHOLDER = '/placeholder-product.svg';
-  const image =
-    deal.thumbnailUrl ||
-    deal.naverProducts?.[0]?.image ||
-    PLACEHOLDER;
+  const image = deal.thumbnailUrl || deal.naverProducts?.[0]?.image || null;
 
+  const [imgError, setImgError] = useState(false);
   const [alarmed, setAlarmed] = useState(() => getAlarmedIds().has(deal.id));
   const [wishlisted, setWishlisted] = useState(false);
 
@@ -130,14 +124,20 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
     >
       <div className="flex">
         {/* ── Image ───────────────────────────────────────────────────────── */}
-        <div className="relative w-32 h-32 sm:w-36 sm:h-36 flex-shrink-0 bg-white rounded-xl border border-stone-100 flex items-center justify-center overflow-hidden m-2">
-          <img
-            src={image}
-            alt={deal.productName}
-            loading="lazy"
-            className="w-full h-full object-contain p-2"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER; }}
-          />
+        <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex-shrink-0 rounded-xl overflow-hidden m-2">
+          {image && !imgError ? (
+            <img
+              src={image}
+              alt={deal.productName}
+              loading="lazy"
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="bg-stone-100 w-full h-full flex items-center justify-center">
+              <ImageOff className="w-8 h-8 text-stone-300" />
+            </div>
+          )}
           {isHot && (
             <Badge className="absolute top-2 left-2 bg-destructive text-destructive-foreground text-xs">
               HOT
@@ -167,22 +167,6 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
               </button>
             </div>
 
-            {/* Influencer Instagram link */}
-            {deal.instagramUrl && (
-              <a
-                href={deal.instagramUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 text-stone-500 text-xs mb-0.5 hover:text-orange-500 transition-colors w-fit"
-              >
-                <ExternalLink className="w-3 h-3" />
-                <span className="truncate max-w-[120px]">
-                  @{deal.instagramUrl.replace(/\/$/, '').split('/').filter(Boolean).pop() ?? deal.brand}
-                </span>
-              </a>
-            )}
-
             {/* Product name */}
             <h2 className="font-semibold text-sm sm:text-base text-foreground line-clamp-2 leading-snug">
               {deal.productName}
@@ -191,23 +175,37 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
 
           <div className="mt-2">
             {/* Price row */}
-            <div className="flex items-baseline gap-2 mb-2">
-              {discount && (
-                <span className="text-destructive font-bold text-lg">{discount.rate}%</span>
-              )}
-              <span className="font-bold text-foreground">
-                {formatPrice(deal.price)}
-              </span>
-              {discount && (
-                <span className="text-xs text-muted-foreground line-through">
-                  {discount.originalPrice.toLocaleString('ko-KR')}원
+            {deal.price > 0 && (
+              <div className="flex items-baseline gap-2 mb-2">
+                {discount && (
+                  <span className="text-destructive font-bold text-lg">{discount.rate}%</span>
+                )}
+                <span className="font-bold text-foreground">
+                  {deal.price.toLocaleString('ko-KR')}원
                 </span>
-              )}
-            </div>
+                {discount && (
+                  <span className="text-xs text-muted-foreground line-through">
+                    {discount.originalPrice.toLocaleString('ko-KR')}원
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Stats + alarm */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {deal.instagramUrl && (
+                  <a
+                    href={deal.instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 text-stone-400 hover:text-orange-500 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    @{deal.instagramUrl.replace(/\/$/, '').split('/').filter(Boolean).pop() ?? deal.brand}
+                  </a>
+                )}
                 {deal.viewCount > 0 && (
                   <span className="flex items-center gap-1">
                     <Users className="w-3.5 h-3.5" />
