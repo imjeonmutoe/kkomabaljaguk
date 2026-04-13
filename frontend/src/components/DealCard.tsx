@@ -1,5 +1,6 @@
 import { memo, useState, useCallback } from 'react';
 import { Clock, Users, Heart, Bell, BellOff, ExternalLink, ImageOff } from 'lucide-react';
+import { useWishlist } from '../hooks/useWishlist';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -101,7 +102,8 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
 
   const [imgError, setImgError] = useState(false);
   const [alarmed, setAlarmed] = useState(() => getAlarmedIds().has(deal.id));
-  const [wishlisted, setWishlisted] = useState(false);
+  const { wishlistedIds, toggle: toggleWishlist } = useWishlist();
+  const wishlisted = wishlistedIds.has(deal.id);
 
   const handleAlarm = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -110,8 +112,8 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
 
   const handleWishlist = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    setWishlisted((v) => !v);
-  }, []);
+    toggleWishlist(deal.id);
+  }, [deal.id, toggleWishlist]);
 
   return (
     <Card
@@ -203,7 +205,7 @@ export const DealCard = memo(function DealCard({ deal }: Props) {
                     className="flex items-center gap-1 text-stone-400 hover:text-orange-500 transition-colors"
                   >
                     <ExternalLink className="w-3 h-3" />
-                    @{deal.instagramUrl.replace(/\/$/, '').split('/').filter(Boolean).pop() ?? deal.brand}
+                    @{deal.instagramUrl.replace(/\/$/, '').split('/').filter(Boolean).pop()?.split('?')[0] ?? deal.brand}
                   </a>
                 )}
                 {deal.viewCount > 0 && (

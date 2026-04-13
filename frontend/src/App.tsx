@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { WishlistProvider } from './hooks/useWishlist';
 
 // Lazy-load pages to keep initial bundle small
 const Timeline = lazy(() => import('./pages/Timeline').then((m) => ({ default: m.Timeline })));
@@ -20,6 +21,7 @@ function PageLoader() {
 export default function App() {
   return (
     <BrowserRouter>
+      <WishlistProvider>
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Timeline />} />
@@ -30,6 +32,7 @@ export default function App() {
           <Route path="/mypage" element={<MyPage />} />
         </Routes>
       </Suspense>
+      </WishlistProvider>
     </BrowserRouter>
   );
 }
