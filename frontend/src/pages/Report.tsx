@@ -107,8 +107,11 @@ const EXCLUDED_DOMAINS = [
 ];
 // Stage 1: title keywords that mark a block as non-deal
 const EXCLUDED_TITLE_KEYWORDS = ['CS', '문의', '고객센터', '프리뷰', '주의', '당근', '조기품절', '배송현황', '확인링크', '후기'];
+// Stage 1: title prefix emoji that marks a block as non-deal (e.g. customer-service links)
+const EXCLUDED_TITLE_PREFIX_RE = /^💬/;
 // Stage 1: domains that strongly indicate a deal (auto-include, checked ON)
-const AUTO_INCLUDE_DOMAINS = ['srok.kr', 'srookpay.com', 'mkt.shopping.naver.com', 'cafe24.com'];
+// Note: mkt.shopping.naver.com intentionally excluded → handled by stage-2 fetch
+const AUTO_INCLUDE_DOMAINS = ['srok.kr', 'srookpay.com', 'cafe24.com'];
 // Stage 1: title keywords that strongly indicate a deal
 const AUTO_INCLUDE_TITLE_KEYWORDS = ['오픈', 'OPEN', '핫딜', '공구', '구매'];
 // Stage 1: date range pattern in title (e.g. [4/10~4/15])
@@ -119,6 +122,7 @@ function classifyBlock(block: RawBlock): 'exclude' | 'include' | 'ambiguous' {
   const title = block.title || '';
   if (EXCLUDED_DOMAINS.some((d) => url.includes(d))) return 'exclude';
   if (EXCLUDED_TITLE_KEYWORDS.some((kw) => title.includes(kw))) return 'exclude';
+  if (EXCLUDED_TITLE_PREFIX_RE.test(title)) return 'exclude';
   if (block.open_at) return 'include';
   if (AUTO_INCLUDE_DOMAINS.some((d) => url.includes(d))) return 'include';
   if (AUTO_INCLUDE_TITLE_KEYWORDS.some((kw) => title.includes(kw))) return 'include';
