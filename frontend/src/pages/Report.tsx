@@ -84,6 +84,48 @@ function fixInpockImageUrl(url: string): string {
   return `https://link.inpock.co.kr/${url}`;
 }
 
+// ── Inpock block type ─────────────────────────────────────────────────────────
+
+type RawBlock = {
+  title: string;
+  image: string;
+  url: string;
+  open_at: string | null;
+  open_until: string | null;
+};
+
+// ── Inpock filtering constants ────────────────────────────────────────────────
+
+// Stage 1: domains/paths that are definitely not deals (hidden entirely)
+const EXCLUDED_DOMAINS = [
+  'pf.kakao.com', 'open.kakao.com', 'kakaocdn.net',
+  'drive.google.com', 'docs.google.com',
+  'notion.so', 'youtube.com',
+  'link.coupang.com', 'talk.naver.com',
+  'sanjitalk.com', 'instagram.com/channel',
+  'brand.naver.com',
+];
+// Stage 1: title keywords that mark a block as non-deal
+const EXCLUDED_TITLE_KEYWORDS = ['CS', '문의', '고객센터', '프리뷰', '주의', '당근', '조기품절', '배송현황', '확인링크', '후기'];
+// Stage 1: domains that strongly indicate a deal (auto-include, checked ON)
+const AUTO_INCLUDE_DOMAINS = ['srok.kr', 'srookpay.com', 'mkt.shopping.naver.com', 'cafe24.com'];
+// Stage 1: title keywords that strongly indicate a deal
+const AUTO_INCLUDE_TITLE_KEYWORDS = ['오픈', 'OPEN', '핫딜', '공구', '구매'];
+// Stage 1: date range pattern in title (e.g. [4/10~4/15])
+const AUTO_INCLUDE_DATE_RE = /\[\d+\/\d+.*\d+\/\d+\]/;
+
+function classifyBlock(block: RawBlock): 'exclude' | 'include' | 'ambiguous' {
+  const url = block.url || '';
+  const title = block.title || '';
+  if (EXCLUDED_DOMAINS.some((d) => url.includes(d))) return 'exclude';
+  if (EXCLUDED_TITLE_KEYWORDS.some((kw) => title.includes(kw))) return 'exclude';
+  if (block.open_at) return 'include';
+  if (AUTO_INCLUDE_DOMAINS.some((d) => url.includes(d))) return 'include';
+  if (AUTO_INCLUDE_TITLE_KEYWORDS.some((kw) => title.includes(kw))) return 'include';
+  if (AUTO_INCLUDE_DATE_RE.test(title)) return 'include';
+  return 'ambiguous';
+}
+
 // ── Field wrapper ─────────────────────────────────────────────────────────────
 
 function Field({
@@ -209,6 +251,10 @@ export function Report() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // Stage 2 checking progress
+  const [checkingPhase, setCheckingPhase] = useState(false);
+  const [checkingProgress, setCheckingProgress] = useState({ current: 0, total: 0 });
+
   // Detect admin role on mount
   useEffect(() => {
     const uid = auth.currentUser?.uid;
@@ -270,7 +316,7 @@ export function Report() {
     }
   }
 
-  // ── Inpock parsing ─────────────────────────────────────────────────────────
+  // ── Inpock parsing (2-stage filtering) ────────────────────────────────────
   async function parseInpock(url: string) {
     if (!OCR_API_URL) throw new Error('서버 URL이 설정되지 않았어요.');
 
@@ -285,56 +331,67 @@ export function Report() {
       throw new Error(body.detail ?? `파싱 오류 (${res.status})`);
     }
 
-    type RawBlock = {
-      title: string;
-      image: string;
-      url: string;
-      open_at: string | null;
-      open_until: string | null;
-      block_type: string;
-    };
     const blocks: RawBlock[] = await res.json();
 
-    // Patterns that indicate a deal item (auto-check)
-    const AUTO_INCLUDE_DOMAINS = [
-      'srok.kr', 'srookpay.com', 'mkt.shopping.naver.com',
-      'cafe24.com', 'mowm.co.kr',
-    ];
-    // Patterns that are definitely not deals (hide entirely)
-    const EXCLUDED_DOMAINS = [
-      'pf.kakao.com', 'open.kakao.com', 'kakaocdn.net',
-      'drive.google.com', 'docs.google.com',
-      'notion.so', 'youtube.com', 'instagram.com',
-      'link.coupang.com', 'naver.me', 'talk.naver.com',
-      'buddy.oasis.co.kr', 'sanjitalk.com',
-    ];
+    // Stage 1: classify each block immediately (no fetch needed)
+    const autoIncluded: RawBlock[] = [];
+    const ambiguous: RawBlock[] = [];
 
-    const items = blocks.filter((b) => {
-      if (!b.url) return false;
-      if (b.url.startsWith('mailto:')) return false;
-      // Hide excluded domains entirely
-      if (EXCLUDED_DOMAINS.some((d) => b.url.includes(d))) return false;
-      return true;
+    for (const block of blocks) {
+      if (!block.url || block.url.startsWith('mailto:')) continue;
+      const cls = classifyBlock(block);
+      if (cls === 'include') autoIncluded.push(block);
+      else if (cls === 'ambiguous') ambiguous.push(block);
+      // 'exclude' → skip entirely
+    }
+
+    const toItem = (block: RawBlock, id: number): InpockItem => ({
+      id: String(id),
+      title: block.title,
+      imageUrl: block.image ? fixInpockImageUrl(block.image) : '',
+      url: block.url,
+      openAt: block.open_at ? toDatetimeLocal(block.open_at) : null,
+      openUntil: block.open_until ? toDatetimeLocal(block.open_until) : null,
+      checked: true,
+      category: '',
     });
 
+    if (ambiguous.length === 0) {
+      setImgErrors({});
+      setInpockItems(autoIncluded.map((b, i) => toItem(b, i)));
+      return;
+    }
+
+    // Stage 2: fetch each ambiguous URL to check if it's a shopping page
+    setCheckingPhase(true);
+    setCheckingProgress({ current: 0, total: ambiguous.length });
+
+    const passedAmbiguous: RawBlock[] = [];
+    try {
+      for (let i = 0; i < ambiguous.length; i++) {
+        if (i > 0) await new Promise<void>((r) => setTimeout(r, 500));
+        try {
+          const checkRes = await fetch(`${OCR_API_URL}/check-shopping`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: ambiguous[i].url }),
+          });
+          if (checkRes.ok) {
+            const { isShoppingPage } = await checkRes.json() as { isShoppingPage: boolean };
+            if (isShoppingPage) passedAmbiguous.push(ambiguous[i]);
+          }
+        } catch {
+          // fetch failure → treat as not a shopping page, continue
+        }
+        setCheckingProgress({ current: i + 1, total: ambiguous.length });
+      }
+    } finally {
+      setCheckingPhase(false);
+    }
+
+    const allBlocks = [...autoIncluded, ...passedAmbiguous];
     setImgErrors({});
-    setInpockItems(
-      items.map((item, i) => {
-        const isAutoInclude =
-          !!item.open_at ||
-          AUTO_INCLUDE_DOMAINS.some((d) => item.url.includes(d));
-        return {
-          id: String(i),
-          title: item.title,
-          imageUrl: item.image ? fixInpockImageUrl(item.image) : '',
-          url: item.url,
-          openAt: item.open_at ? toDatetimeLocal(item.open_at) : null,
-          openUntil: item.open_until ? toDatetimeLocal(item.open_until) : null,
-          checked: isAutoInclude,
-          category: '',
-        };
-      }),
-    );
+    setInpockItems(allBlocks.map((b, i) => toItem(b, i)));
   }
 
   // ── Inpock influencer lookup ───────────────────────────────────────────────
@@ -648,7 +705,7 @@ export function Report() {
             <button
               type="button"
               onClick={handleParse}
-              disabled={!linkInput.trim() || parsing}
+              disabled={!linkInput.trim() || parsing || checkingPhase}
               className="flex items-center justify-center w-16 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {parsing ? <Spinner /> : '파싱'}
@@ -689,8 +746,18 @@ export function Report() {
           )}
         </div>
 
+        {/* ── Inpock mode: stage 2 checking progress ──────────────────── */}
+        {mode === 'inpock' && checkingPhase && (
+          <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 flex flex-col items-center gap-3">
+            <span className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-stone-600 font-medium">
+              공구 항목을 확인하고 있어요... ({checkingProgress.current}/{checkingProgress.total})
+            </p>
+          </div>
+        )}
+
         {/* ── Inpock mode: checkbox list ───────────────────────────────── */}
-        {mode === 'inpock' && inpockItems.length > 0 && (
+        {mode === 'inpock' && !checkingPhase && inpockItems.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
               <p className="text-sm font-bold text-stone-900">

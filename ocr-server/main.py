@@ -149,6 +149,10 @@ class ParseUrlRequest(BaseModel):
     url: str
 
 
+class CheckShoppingRequest(BaseModel):
+    url: str
+
+
 class NaverRefreshRequest(BaseModel):
     dealId: str
     productName: str
@@ -318,6 +322,45 @@ async def parse_inpock(body: ParseUrlRequest) -> list:
             'open_until': block.get('open_until'),
         })
     return results
+
+
+# ── Shopping page check ───────────────────────────────────────────────────────
+
+@app.post('/check-shopping')
+async def check_shopping(body: CheckShoppingRequest) -> dict:
+    """
+    Fetch a URL and determine if it's a shopping/product page.
+    Used for stage-2 filtering of ambiguous inpock blocks.
+
+    Returns: { isShoppingPage: boolean }
+    """
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=5) as client:
+            resp = await client.get(body.url, headers=_HEADERS)
+            resp.raise_for_status()
+    except Exception:
+        return {'isShoppingPage': False}
+
+    html = resp.text
+
+    # og:type = "product" → shopping
+    og_type = _extract_og(html, 'type').lower()
+    if og_type == 'product':
+        return {'isShoppingPage': True}
+
+    # Price pattern (number + 원/won) → shopping
+    if re.search(r'[0-9,]+\s*(?:원|won)', html):
+        return {'isShoppingPage': True}
+
+    # Shopping action keywords → shopping
+    if re.search(r'구매하기|장바구니|주문하기', html):
+        return {'isShoppingPage': True}
+
+    # og:type = "article" → not shopping
+    if og_type == 'article':
+        return {'isShoppingPage': False}
+
+    return {'isShoppingPage': False}
 
 
 # ── Srookpay / srok.kr parsing ────────────────────────────────────────────────
